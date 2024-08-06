@@ -1,0 +1,13 @@
+chem_form_1: MoS2
+chem_form_2: MoSe2
+alat_1: 3.146
+alat_2: 3.266
+thickness_1: 3.19
+thickness_2: 3.33
+vacuum: 15
+twist_angle: 27.8
+ILS: 6.25
+strain_threshold: 0.05
+hbn: False
+nat_prim: 3
+outfile: MoS2-MoSe2_twist_angle_27.8.vasp
