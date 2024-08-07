@@ -202,8 +202,20 @@ class twisted_tmd:
         a11 = np.linalg.norm(top_layer.cell, axis=-1)[0]
         a22 = np.linalg.norm(bottom_layer.cell, axis=-1)[0]
         print(a11,a22)
-        atoms = top_layer + bottom_layer
-        
+
+        if a11 > a22:
+            cell =  top_layer.cell
+        else:
+            cell =  bottom_layer.cell
+
+        scaled_positions = top_layer.get_scaled_positions()
+        scaled_positions = np.append(scaled_positions, bottom_layer.get_scaled_positions())
+        scaled_positions = np.reshape(scaled_positions, [-1,3])
+        symbols = list(top_layer.symbols) + list(bottom_layer.symbols)
+        atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
+
+
+
         if hbn:
             atoms_hbn = graphene('BN', a=2.504, vacuum=15)
             ahbn = 2.504
@@ -343,15 +355,23 @@ class twisted_tmd:
         print(f'lattice parameters after strain relaxations are top {a1*n1} and bottom {a2*n2} with {n1} and {n2}')
         print(f'final strain {strain}')
         
-        _top_layer = top_layer.repeat((n1,n1,1))
-        _bottom_layer = bottom_layer.repeat((n2,n2,1))
-        
-            
-        if a2*n2 > n1*a1:
-            atoms =  _bottom_layer + _top_layer
+        top_layer = top_layer.repeat((n1,n1,1))
+        bottom_layer = bottom_layer.repeat((n2,n2,1))
+
+        a1 = np.linalg.norm(top_layer.cell, axis=-1)[0]
+        a2 = np.linalg.norm(bottom_layer.cell, axis=-1)[0]
+
+        if a1 > a2:
+            cell =  top_layer.cell
         else:
-            atoms =  _top_layer + _bottom_layer
-        atoms.cell = (_top_layer.cell + _bottom_layer.cell) / 2
+            cell =  bottom_layer.cell
+
+        scaled_positions = top_layer.get_scaled_positions()
+        scaled_positions = np.append(scaled_positions, bottom_layer.get_scaled_positions())
+        scaled_positions = np.reshape(scaled_positions, [-1,3])
+        symbols = list(top_layer.symbols) + list(bottom_layer.symbols)
+        atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
+            
         if hbn:
             atoms_hbn = graphene('BN', a=2.504, vacuum=15)
             a22 = n2*a2
@@ -359,7 +379,7 @@ class twisted_tmd:
             nr = round(a22/ahbn)
             strain = np.abs(1 - a22 / (nr*ahbn))
             #n11,n22,strain = self.minimize_strain(ahbn,a22, eps=eps)
-            zmin_tmd = np.min(_bottom_layer.positions[:,2])
+            zmin_tmd = np.min(bottom_layer.positions[:,2])
             zmin_hbn = np.min(atoms_hbn.positions[:,2])
             atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.35)
             atoms_hbn = atoms_hbn.repeat((nr,nr,1))
