@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.optimize import fsolve, least_squares
 from ase.build import mx2
 from ase.io import read,write
 from ase import Atoms
@@ -24,6 +25,17 @@ class twisted_tmd:
         '''
         cos_theta = (n[0]**2 + 4*n[0]*n[1] + n[1]**2) / (2*(n[0]**2 + n[0]*n[1] + n[1]**2))
         return np.arccos(cos_theta) * 180/np.pi
+    
+    def compute_angle_general(self, n):
+        '''
+        return cos theta in degrees
+        
+        '''
+        n1,m1,n2,m2 = n
+        cos_theta = (n1*n2 + 2*(n1*m2 + n2*m1) + m1*m2) / (2*(n1**2 + n1*m1 + m1**2)**0.5 * (n2**2 + n2*m2 + m2**2)**0.5 + 1e-12 )
+        
+        return np.arccos(cos_theta) * 180/np.pi
+    
     
     def rotate_atoms(self, atom, angle):
         atom.rotate(angle, 'z',rotate_cell=True)
@@ -61,6 +73,35 @@ class twisted_tmd:
             #    break
         
         return n0
+    def search_nm_indexes_general(self, angle, a1, a2, eps):
+        if np.abs(angle) < 1e-6:
+            return [1,1]
+        n0 = [30,30,30,30]
+        nat0 = self.get_number_of_atoms(n0[:2]) + self.get_number_of_atoms(n0[2:])
+        for i in range(1,30):
+            for j in range(1,30):
+                for k in range(1,30):
+                    for l in range(1,30):
+                        if i==j or l == k:
+                            continue
+                        n =[i,j,k,l]
+                        theta = self.compute_angle_general(n)
+                        r1 = a1 * np.sqrt(i**2+ i * j + j**2)
+                        r2 = a2 * np.sqrt(k**2+ k * l + l**2)
+                        
+                        da = np.abs(1 - r1/r2)
+                        
+                        if np.abs(theta - angle) < 0.1 and da < eps:
+                            
+
+                            nat = self.get_number_of_atoms(n[:2]) + self.get_number_of_atoms(n[2:])
+                            #print(theta,angle,da, n, nat)
+                           # print(nat,n,theta, np.abs(theta - angle))
+                            if nat < nat0:
+                                n0 = n
+                                nat0 = nat
+        
+        return n0
     
     def generate_superperiodic_lattice(self, atom, n,m,nprim,mprim):
         
@@ -85,21 +126,24 @@ class twisted_tmd:
         s_positions = []
         s_symb = []
         symb = list(atom.symbols)
-        # generate all points. This needs to be optimized or clean up 
+        # generate 
         for k,p in enumerate(atom.positions):  
             for i1 in range(0,n+d[0],d[0]):
                 for i2 in range(0,m+d[1],d[1]):
                     for j1 in range(0,nprim+d[2],d[2]):
                         for j2 in range(0,mprim+d[3],d[3]):
+                            if i1 == i2 or j1 == j2 or np.sum(np.abs([i1,i2,j1,j2])) == 0.0:
+                                continue
                             ij1 = i1+j1
                             ij2 = i2+j2
                             #p_s = p0 + i1 * a1 + i2 * a2 + j1 * a1 + j2 * a2
                             p_s = p + ij1 * atom.cell[0] + ij2 * atom.cell[1]
-                           # norm_coord = np.matmul(np.linalg.inv(a_cell.T), p_s) 
+                            norm_coord = np.matmul(np.linalg.inv(a_cell.T), p_s) 
                             s_positions.append(p_s)
                             s_symb.append(symb[k])
                            
 
+        #print(i,len(s_positions))
         
         #extract atoms that live in the super periodic cell
         atoms = Atoms(cell=a_cell,positions=s_positions,symbols=s_symb, pbc=True)
@@ -133,25 +177,23 @@ class twisted_tmd:
         _angle = self.compute_angle(indexes)
         if np.abs(_angle-self.angle) < 1e-1:
             print(f'indices are correctly computed')
-
-        #rotate ase vectors from [90,90,120] to [90,90,60]
-        #intial lattice vectors: cell = [[1,0,0],[-1/2, root(3)/2,0],[0,0,c/a]] * a
-        #final lattice vectors after rotation: cell = [[root(3)/2,1/2,0],[-root(3)/2, 1/2,0],[0,0,c/a]] * a
-        #this obtained by rotation of the entire system by 30 degrees
-
+        
         #note that these indexes depends on the choice of lattice vectors
         # for the specific ASE lattice, the following definitions are correct
             
         n,m = indexes
         nprim = m; mprim = m + n
         
-                
+        #rotate ase vectors from [90,90,120] to [90,90,60]
+        #intial lattice vectors: cell = [[1,0,0],[-1/2, root(3)/2,0],[0,0,c/a]] * a
+        #final lattice vectors after rotation: cell = [[root(3)/2,1/2,0],[-root(3)/2, 1/2,0],[0,0,c/a]] * a
+        #this obtained by rotation of the entire system by 30 degrees
+        
         self.atom_1.rotate(30,'z',rotate_cell=True)
         top_layer = self.generate_superperiodic_lattice(self.atom_1, n,-m,nprim,mprim)
         top_layer.positions[:,2] += self.ILS / 2
         top_layer = self.rotate_atoms(top_layer, self.angle/2)
-        #bottom layer has different lattice vectors in general
-
+        #bottom layer has different lattice vectors
         self.atom_2.rotate(30,'z',rotate_cell=True)
         nprim = n; mprim = n+m
         bottom_layer = self.generate_superperiodic_lattice(self.atom_2, m,-n,nprim,mprim)
@@ -167,7 +209,7 @@ class twisted_tmd:
             ahbn = 2.504
             nr = round(a22/ahbn)
             strain = np.abs(1 - a22 / (nr*ahbn))
-            #n11,n22,strain = self.minimize_strain(ahbn,a22, eps=eps)
+            
             zmin_tmd = np.min(bottom_layer.positions[:,2])
             zmin_hbn = np.min(atoms_hbn.positions[:,2])
             atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.35)
@@ -175,10 +217,11 @@ class twisted_tmd:
             atoms += atoms_hbn
             
         return atoms
-    
-    def minimize_strain(self, a1, a2, eps=.05):
+                
+    def minimize_strain(self, a1,a2,eps=.01):
         '''reduce strain between two mismatch TMDs
         '''
+        
         
         strain = np.abs(1 - a2/a1)
         print(f'initial strain is {strain}')
@@ -188,28 +231,34 @@ class twisted_tmd:
                 if strain < eps:
                     print(strain)
                     return n1,n2,strain
-                     
+                
     def generate_moire_lattice_hetero(self, eps, hbn=False):
-        '''compute twisted heterobilayer TMD'''
+        '''compute twisted heterobilayer TMD
+           In this case, we extend the PHYSICAL REVIEW B 90, 155451 (2014)
+           to account for lattice mismatch between layers
+        '''
         
         atom_1 = self.atom_1
         atom_2 = self.atom_2
         
-        
-        #get n,m for a give rotation angle
-        indexes = self.search_nm_indexes(self.angle)
-        print(indexes)
+        a1 = np.linalg.norm(atom_1.cell, axis=-1)[0]
+        a2 = np.linalg.norm(atom_2.cell, axis=-1)[0]
+        #print(a1,a2)
+        #get n1,m1,n2,m2 for a give rotation angle between
+        #lattice vectors defined by n1 and m1 for layer 1 and n2 and m2 for layer 2
+        n1,m1,n2,m2 = self.search_nm_indexes_general(self.angle, a1, a2,eps)
+        print(n1,m1,n2,m2)
         # check that angle is correct
-        _angle = self.compute_angle(indexes)
-        if np.abs(_angle-self.angle) < 1e-1:
-            print(f'indices are correctly computed')
+        _angle = self.compute_angle_general((n1,m1,n2,m2))
+        if np.abs(_angle-self.angle) < 0.5e-1:
+            print(f'indices are correctly computed @ {_angle} and target {self.angle}')
         
         #note that these indexes depends on the choice of lattice vectors
         # for the specific ASE lattice, the following definitions are correct
         
         
-        n,m = indexes
-        nprim = m; mprim = m + n
+       
+        nprim = m1; mprim = m1 + n1
         
         #rotate ase vectors from [90,90,120] to [90,90,60]
         #intial lattice vectors: cell = [[1,0,0],[-1/2, root(3)/2,0],[0,0,c/a]] * a
@@ -217,43 +266,52 @@ class twisted_tmd:
         #this obtained by rotation of the entire system by 30 degrees
         
         atom_1.rotate(30,'z',rotate_cell=True)
-        top_layer = self.generate_superperiodic_lattice(atom_1, n,-m,nprim,mprim)
+        top_layer = self.generate_superperiodic_lattice(atom_1, n1,-m1,nprim,mprim)
         top_layer.positions[:,2] += self.ILS / 2
         top_layer = self.rotate_atoms(top_layer, self.angle/2)
-        
+        #write('test.vasp', top_layer)
         #this should be different
         atom_2.rotate(30,'z',rotate_cell=True)
         #bottom layer has different lattice vectors
-        nprim = n; mprim = n+m
-        bottom_layer = self.generate_superperiodic_lattice(atom_2, m,-n,nprim,mprim)
+        nprim = n2; mprim = n2+m2
+        bottom_layer = self.generate_superperiodic_lattice(atom_2, m2,-n2,nprim,mprim)
         bottom_layer.positions[:,2] -= self.ILS / 2
+        #match the two cell
         bottom_layer = self.rotate_atoms(bottom_layer, -self.angle/2)
+        #write('test2.vasp', bottom_layer)
+        #minimize the angle betwee
         a1 = np.linalg.norm(top_layer.cell, axis=-1)[0]
         a2 = np.linalg.norm(bottom_layer.cell, axis=-1)[0]
+        print(a1,np.linalg.norm(top_layer.cell, axis=-1)[1])
+        print(a2,np.linalg.norm(bottom_layer.cell, axis=-1)[1])
+        strain = np.abs(1 - a1/a2)
+        print(f'lattice parameters at strain {strain} upon relaxations are top {a1} and bottom {a2}')
         
-        print(f'lattice parameters before strain relaxations are top {a1} and bottom {a2}')
-      
-        n1,n2, strain = self.minimize_strain(a1, a2, eps=eps)
-        print(f'lattice parameters after strain relaxations are top {a1*n1} and bottom {a2*n2} with {n1} and {n2}')
-        print(f'final strain {strain}')
         
-        _top_layer = top_layer.repeat((n1,n1,1))
-        _bottom_layer = bottom_layer.repeat((n2,n2,1))
-        if a2*n2 > n1*a1:
-            atoms =  _bottom_layer + _top_layer
+        if a1 > a2:
+            cell =  top_layer.cell
         else:
-            atoms =  _top_layer + _bottom_layer
+            cell =  bottom_layer.cell
             
-        atoms.cell = (_top_layer.cell + _bottom_layer.cell) / 2
+        scaled_positions = top_layer.get_scaled_positions()
+        scaled_positions = np.append(scaled_positions, bottom_layer.get_scaled_positions())
+        scaled_positions = np.reshape(scaled_positions, [-1,3])
+        symbols = list(top_layer.symbols) + list(bottom_layer.symbols)
+        #print(symbols)
+        #atoms.scaled_positions = scaled_positions
+        #atoms.symbols = symbols
+        #atoms.pbc = True
+        atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
         
+                
         if hbn:
             atoms_hbn = graphene('BN', a=2.504, vacuum=15)
             a22 = n2*a2
             ahbn = 2.504
             nr = round(a22/ahbn)
             strain = np.abs(1 - a22 / (nr*ahbn))
-            #n11,n22,strain = self.minimize_strain(ahbn,a22, eps=eps)
-            zmin_tmd = np.min(_bottom_layer.positions[:,2])
+            
+            zmin_tmd = np.min(bottom_layer.positions[:,2])
             zmin_hbn = np.min(atoms_hbn.positions[:,2])
             atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.35)
             atoms_hbn = atoms_hbn.repeat((nr,nr,1))
@@ -281,7 +339,7 @@ class twisted_tmd:
         a2 = np.linalg.norm(bottom_layer.cell, axis=-1)[0]
         print(f'lattice parameters before strain relaxations are top {a1} and bottom {a2}')
       
-        n1,n2, strain = self.minimize_strain(a1, a2, eps=eps)
+        n1,n2, strain = self.minimize_strain(a1,a2,eps=eps)
         print(f'lattice parameters after strain relaxations are top {a1*n1} and bottom {a2*n2} with {n1} and {n2}')
         print(f'final strain {strain}')
         
@@ -307,6 +365,3 @@ class twisted_tmd:
             atoms_hbn = atoms_hbn.repeat((nr,nr,1))
             atoms += atoms_hbn
         return atoms
-
-
-

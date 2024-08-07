@@ -17,12 +17,12 @@ def main(chem_form_1, chem_form_2,
    
 
     if chem_form_1 == 'C2' or chem_form_1 == 'graphene':
-        atom1 = graphene(chem_form_1,a=alat_1, vacuum=15)
+        atom1 = graphene(chem_form_1,a=alat_1, vacuum=vacuum)
     else:
         atom1 = mx2(chem_form_1,a=alat_1, thickness=width_1, vacuum=vacuum)
 
     if chem_form_2 == 'C2' or chem_form_2 == 'graphene':
-        atom2 = graphene(chem_form_2,a=alat_2, vacuum=15)
+        atom2 = graphene(chem_form_2,a=alat_2, vacuum=vacuum)
     else:
         atom2 = mx2(chem_form_2,a=alat_2, thickness=width_2, vacuum=vacuum)
 
@@ -34,11 +34,12 @@ def main(chem_form_1, chem_form_2,
         elif chem_form_1 != chem_form_2:
             twist_atoms = twist_atoms.generate_moire_lattice_hetero(eps=strain_threshold, hbn=hbn)
     else:
-        twist_atoms = twist_atoms.generate_moire_lattice_at_zero_twist(eps=strain_threshold, hbn=False)
+        twist_atoms = twist_atoms.generate_moire_lattice_at_zero_twist(eps=strain_threshold, hbn=hbn)
         
     Nat = twist_atoms.get_global_number_of_atoms()
     print('total number of atoms',Nat)
-    write(outfile, twist_atoms, sort=True)
+    
+    write(outfile, twist_atoms, sort=True, format='vasp', direct=True)
     
 if __name__ == '__main__':
 
