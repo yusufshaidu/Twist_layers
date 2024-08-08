@@ -152,6 +152,9 @@ class twisted_tmd:
         in_symbols = []
         for i, p in enumerate(atoms.get_scaled_positions()):
             kk = 0
+            
+            p = (p+1e-12) % 1.0
+
             #check of atoms are already considers
             for _p in in_positions:
                 delta = np.linalg.norm(p-_p)
@@ -160,10 +163,11 @@ class twisted_tmd:
                     break
             if kk == 1:
                 continue
-            if np.max(np.abs(p)) < 1.0-1e-6:
-                in_positions.append(p)
-                in_symbols.append(atoms.symbols[i])
-                #print(np.max(p), p)
+            #if np.max(np.abs(p)) < 1.0-1e-6:
+            in_positions.append(p)
+            in_symbols.append(atoms.symbols[i])
+
+            #print(np.max(p), p)
         #print(len(pp))
         atoms = Atoms(cell=a_cell,scaled_positions=in_positions,symbols=in_symbols, pbc=True)
         return atoms
