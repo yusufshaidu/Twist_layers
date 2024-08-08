@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.optimize import fsolve, least_squares
 from ase.build import mx2
 from ase.io import read,write
 from ase import Atoms
@@ -47,10 +46,10 @@ class twisted_tmd:
     def search_nm_indexes(self, angle):
         if np.abs(angle) < 1e-6:
             return [1,1]
-        n0 = [100,100]
+        n0 = [30,30]
         nat0 = self.get_number_of_atoms(n0)
-        for i in range(0,100):
-            for j in range(0,100):
+        for i in range(0,30):
+            for j in range(0,30):
                 if i==j:
                     continue
                 n =[i,j]
@@ -132,16 +131,14 @@ class twisted_tmd:
                 for i2 in range(0,m+d[1],d[1]):
                     for j1 in range(0,nprim+d[2],d[2]):
                         for j2 in range(0,mprim+d[3],d[3]):
-                            if i1 == i2 or j1 == j2 or np.sum(np.abs([i1,i2,j1,j2])) == 0.0:
-                                continue
                             ij1 = i1+j1
                             ij2 = i2+j2
                             #p_s = p0 + i1 * a1 + i2 * a2 + j1 * a1 + j2 * a2
                             p_s = p + ij1 * atom.cell[0] + ij2 * atom.cell[1]
-                            norm_coord = np.matmul(np.linalg.inv(a_cell.T), p_s)
+                            norm_coord = np.matmul(np.linalg.inv(a_cell.T), p_s) 
                             if np.max(norm_coord) > 1.0:
                                 continue
-
+                                
                             s_positions.append(p_s)
                             s_symb.append(symb[k])
                            
@@ -155,22 +152,20 @@ class twisted_tmd:
         in_symbols = []
         for i, p in enumerate(atoms.get_scaled_positions()):
             kk = 0
-            
-            p = (p+1e-12) % 1.0
-
+            p = (p+1e-12)%1.0
             #check of atoms are already considers
             for _p in in_positions:
                 delta = np.linalg.norm(p-_p)
-                if delta < 1e-3:
+               
+                if delta < 1e-6:
                     kk = 1
                     break
             if kk == 1:
                 continue
-            #if np.max(np.abs(p)) < 1.0-1e-6:
+            #if np.max(np.abs(p)) < 1.0-1e-12:
             in_positions.append(p)
             in_symbols.append(atoms.symbols[i])
-
-            #print(np.max(p), p)
+                #print(np.max(p), p)
         #print(len(pp))
         atoms = Atoms(cell=a_cell,scaled_positions=in_positions,symbols=in_symbols, pbc=True)
         return atoms
@@ -208,22 +203,23 @@ class twisted_tmd:
         bottom_layer = self.rotate_atoms(bottom_layer, -self.angle/2)
         a11 = np.linalg.norm(top_layer.cell, axis=-1)[0]
         a22 = np.linalg.norm(bottom_layer.cell, axis=-1)[0]
+        
         print(a11,a22)
-
-        if a11 > a22:
+        
+        if a1 > a2:
             cell =  top_layer.cell
         else:
             cell =  bottom_layer.cell
-
         scaled_positions = top_layer.get_scaled_positions()
         scaled_positions = np.append(scaled_positions, bottom_layer.get_scaled_positions())
         scaled_positions = np.reshape(scaled_positions, [-1,3])
         symbols = list(top_layer.symbols) + list(bottom_layer.symbols)
-        atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
-
-
-
-        if hbn:
+        
+        if not hbn:
+            atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
+        
+                
+        else:
             atoms_hbn = graphene('BN', a=2.504, vacuum=15)
             ahbn = 2.504
             nr = round(a22/ahbn)
@@ -233,8 +229,10 @@ class twisted_tmd:
             zmin_hbn = np.min(atoms_hbn.positions[:,2])
             atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.35)
             atoms_hbn = atoms_hbn.repeat((nr,nr,1))
-            atoms += atoms_hbn
-            
+            scaled_positions = np.append(scaled_positions, atoms_hbn.get_scaled_positions())
+            scaled_positions = np.reshape(scaled_positions, [-1,3])
+            symbols += list(atoms_hbn.symbols)
+            atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
         return atoms
                 
     def minimize_strain(self, a1,a2,eps=.01):
@@ -269,7 +267,7 @@ class twisted_tmd:
         print(n1,m1,n2,m2)
         # check that angle is correct
         _angle = self.compute_angle_general((n1,m1,n2,m2))
-        if np.abs(_angle-self.angle) < 0.5e-1:
+        if np.abs(_angle-self.angle) < 1e-1:
             print(f'indices are correctly computed @ {_angle} and target {self.angle}')
         
         #note that these indexes depends on the choice of lattice vectors
@@ -288,16 +286,15 @@ class twisted_tmd:
         top_layer = self.generate_superperiodic_lattice(atom_1, n1,-m1,nprim,mprim)
         top_layer.positions[:,2] += self.ILS / 2
         top_layer = self.rotate_atoms(top_layer, self.angle/2)
-        #write('test.vasp', top_layer)
+        write('test.vasp', top_layer)
         #this should be different
         atom_2.rotate(30,'z',rotate_cell=True)
         #bottom layer has different lattice vectors
         nprim = n2; mprim = n2+m2
         bottom_layer = self.generate_superperiodic_lattice(atom_2, m2,-n2,nprim,mprim)
         bottom_layer.positions[:,2] -= self.ILS / 2
-        #match the two cell
         bottom_layer = self.rotate_atoms(bottom_layer, -self.angle/2)
-        #write('test2.vasp', bottom_layer)
+        write('test2.vasp', bottom_layer)
         #minimize the angle betwee
         a1 = np.linalg.norm(top_layer.cell, axis=-1)[0]
         a2 = np.linalg.norm(bottom_layer.cell, axis=-1)[0]
@@ -311,19 +308,16 @@ class twisted_tmd:
             cell =  top_layer.cell
         else:
             cell =  bottom_layer.cell
-            
         scaled_positions = top_layer.get_scaled_positions()
         scaled_positions = np.append(scaled_positions, bottom_layer.get_scaled_positions())
         scaled_positions = np.reshape(scaled_positions, [-1,3])
         symbols = list(top_layer.symbols) + list(bottom_layer.symbols)
-        #print(symbols)
-        #atoms.scaled_positions = scaled_positions
-        #atoms.symbols = symbols
-        #atoms.pbc = True
-        atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
+        
+        if not hbn:
+            atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
         
                 
-        if hbn:
+        else:
             atoms_hbn = graphene('BN', a=2.504, vacuum=15)
             a22 = n2*a2
             ahbn = 2.504
@@ -334,7 +328,10 @@ class twisted_tmd:
             zmin_hbn = np.min(atoms_hbn.positions[:,2])
             atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.35)
             atoms_hbn = atoms_hbn.repeat((nr,nr,1))
-            atoms += atoms_hbn
+            scaled_positions = np.append(scaled_positions, atoms_hbn.get_scaled_positions())
+            scaled_positions = np.reshape(scaled_positions, [-1,3])
+            symbols += list(atoms_hbn.symbols)
+            atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
             
         return atoms
     
@@ -364,31 +361,36 @@ class twisted_tmd:
         
         top_layer = top_layer.repeat((n1,n1,1))
         bottom_layer = bottom_layer.repeat((n2,n2,1))
-
+        
         a1 = np.linalg.norm(top_layer.cell, axis=-1)[0]
         a2 = np.linalg.norm(bottom_layer.cell, axis=-1)[0]
-
+        
+        
         if a1 > a2:
             cell =  top_layer.cell
         else:
             cell =  bottom_layer.cell
-
         scaled_positions = top_layer.get_scaled_positions()
         scaled_positions = np.append(scaled_positions, bottom_layer.get_scaled_positions())
         scaled_positions = np.reshape(scaled_positions, [-1,3])
         symbols = list(top_layer.symbols) + list(bottom_layer.symbols)
-        atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
-            
-        if hbn:
+        
+        if not hbn:
+            atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
+                
+        else:
             atoms_hbn = graphene('BN', a=2.504, vacuum=15)
-            a22 = n2*a2
+            a22 = a2
             ahbn = 2.504
             nr = round(a22/ahbn)
             strain = np.abs(1 - a22 / (nr*ahbn))
-            #n11,n22,strain = self.minimize_strain(ahbn,a22, eps=eps)
+            
             zmin_tmd = np.min(bottom_layer.positions[:,2])
             zmin_hbn = np.min(atoms_hbn.positions[:,2])
             atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.35)
             atoms_hbn = atoms_hbn.repeat((nr,nr,1))
-            atoms += atoms_hbn
+            scaled_positions = np.append(scaled_positions, atoms_hbn.get_scaled_positions())
+            scaled_positions = np.reshape(scaled_positions, [-1,3])
+            symbols += list(atoms_hbn.symbols)
+            atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
         return atoms
