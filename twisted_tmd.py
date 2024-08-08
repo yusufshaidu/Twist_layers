@@ -138,7 +138,10 @@ class twisted_tmd:
                             ij2 = i2+j2
                             #p_s = p0 + i1 * a1 + i2 * a2 + j1 * a1 + j2 * a2
                             p_s = p + ij1 * atom.cell[0] + ij2 * atom.cell[1]
-                            norm_coord = np.matmul(np.linalg.inv(a_cell.T), p_s) 
+                            norm_coord = np.matmul(np.linalg.inv(a_cell.T), p_s)
+                            if np.max(norm_coord) > 1.0:
+                                continue
+
                             s_positions.append(p_s)
                             s_symb.append(symb[k])
                            
