@@ -70,7 +70,11 @@ class twisted_tmd:
                     #break
             #if np.abs(theta - angle) < 0.1:
             #    break
-        
+        if np.sum(np.abs(n0)) == 2*30:
+            print(f'no commensurate structures found with a twist angle={angle}')
+            print(f'you may search for different angle!!!')
+            exit()
+
         return n0
     def search_nm_indexes_general(self, angle, a1, a2, eps):
         if np.abs(angle) < 1e-6:
@@ -99,7 +103,10 @@ class twisted_tmd:
                             if nat < nat0:
                                 n0 = n
                                 nat0 = nat
-        
+        if np.sum(np.abs(n0)) == 4*30:
+            print(f'no commensurate structures found with a twist angle={angle} and strain {eps}')
+            print(f'you may increase strain threshold and try again!!!')
+            exit()
         return n0
     
     def generate_superperiodic_lattice(self, atom, n,m,nprim,mprim):
@@ -206,7 +213,7 @@ class twisted_tmd:
         
         print(a11,a22)
         
-        if a1 > a2:
+        if a11 > a22:
             cell =  top_layer.cell
         else:
             cell =  bottom_layer.cell
@@ -220,14 +227,15 @@ class twisted_tmd:
         
                 
         else:
-            atoms_hbn = graphene('BN', a=2.504, vacuum=15)
+            z_len = cell[2,2]
+            atoms_hbn = graphene('BN', a=2.504, vacuum=z_len/2.0)
             ahbn = 2.504
             nr = round(a22/ahbn)
             strain = np.abs(1 - a22 / (nr*ahbn))
             
             zmin_tmd = np.min(bottom_layer.positions[:,2])
             zmin_hbn = np.min(atoms_hbn.positions[:,2])
-            atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.35)
+            atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.4)
             atoms_hbn = atoms_hbn.repeat((nr,nr,1))
             scaled_positions = np.append(scaled_positions, atoms_hbn.get_scaled_positions())
             scaled_positions = np.reshape(scaled_positions, [-1,3])
@@ -318,7 +326,9 @@ class twisted_tmd:
         
                 
         else:
-            atoms_hbn = graphene('BN', a=2.504, vacuum=15)
+            z_len = cell[2,2]
+            atoms_hbn = graphene('BN', a=2.504, vacuum=z_len/2.0)
+
             a22 = n2*a2
             ahbn = 2.504
             nr = round(a22/ahbn)
@@ -326,7 +336,7 @@ class twisted_tmd:
             
             zmin_tmd = np.min(bottom_layer.positions[:,2])
             zmin_hbn = np.min(atoms_hbn.positions[:,2])
-            atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.35)
+            atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.4)
             atoms_hbn = atoms_hbn.repeat((nr,nr,1))
             scaled_positions = np.append(scaled_positions, atoms_hbn.get_scaled_positions())
             scaled_positions = np.reshape(scaled_positions, [-1,3])
@@ -379,7 +389,8 @@ class twisted_tmd:
             atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
                 
         else:
-            atoms_hbn = graphene('BN', a=2.504, vacuum=15)
+            z_len = cell[2,2]
+            atoms_hbn = graphene('BN', a=2.504, vacuum=z_len/2.0)
             a22 = a2
             ahbn = 2.504
             nr = round(a22/ahbn)
@@ -387,7 +398,7 @@ class twisted_tmd:
             
             zmin_tmd = np.min(bottom_layer.positions[:,2])
             zmin_hbn = np.min(atoms_hbn.positions[:,2])
-            atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.35)
+            atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.4)
             atoms_hbn = atoms_hbn.repeat((nr,nr,1))
             scaled_positions = np.append(scaled_positions, atoms_hbn.get_scaled_positions())
             scaled_positions = np.reshape(scaled_positions, [-1,3])
