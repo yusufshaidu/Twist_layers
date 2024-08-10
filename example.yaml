@@ -15,3 +15,5 @@ hbn: False
 nat_prim: 3
 #outfile: MoS2-MoSe2_twist_angle_27.8.vasp
 outfile: twisted_lattice_angle_16.1_at_dAA.vasp
+bilayer: False
+stacking: AA
