@@ -142,9 +142,9 @@ class twisted_tmd:
                             ij2 = i2+j2
                             #p_s = p0 + i1 * a1 + i2 * a2 + j1 * a1 + j2 * a2
                             p_s = p + ij1 * atom.cell[0] + ij2 * atom.cell[1]
-                            norm_coord = np.matmul(np.linalg.inv(a_cell.T), p_s) 
-                            if np.max(norm_coord) > 1.0:
-                                continue
+                            #norm_coord = np.matmul(np.linalg.inv(a_cell.T), p_s) 
+                            #if np.max(norm_coord) > 1.0+1e-12:
+                            #    continue
                                 
                             s_positions.append(p_s)
                             s_symb.append(symb[k])
@@ -179,38 +179,54 @@ class twisted_tmd:
 
     def generate_moire_lattice_homo(self, hbn=False):
         '''compute twisted homobilayer TMD'''
+        
+        if self.angle > 30.0:
+            angle = 60.0 - self.angle
+        else:
+            angle = self.angle
+
         #get n,m for a give rotation angle
-        indexes = self.search_nm_indexes(self.angle)
+
+        indexes = self.search_nm_indexes(angle)
         print(indexes)
         # check that angle is correct
         _angle = self.compute_angle(indexes)
-        if np.abs(_angle-self.angle) < 1e-1:
+        if np.abs(_angle-angle) < 1e-1:
             print(f'indices are correctly computed')
-        
+
         #note that these indexes depends on the choice of lattice vectors
         # for the specific ASE lattice, the following definitions are correct
-            
+
         n,m = indexes
         nprim = m; mprim = m + n
-        
+
         #rotate ase vectors from [90,90,120] to [90,90,60]
         #intial lattice vectors: cell = [[1,0,0],[-1/2, root(3)/2,0],[0,0,c/a]] * a
         #final lattice vectors after rotation: cell = [[root(3)/2,1/2,0],[-root(3)/2, 1/2,0],[0,0,c/a]] * a
         #this obtained by rotation of the entire system by 30 degrees
-        
+
         self.atom_1.rotate(30,'z',rotate_cell=True)
         top_layer = self.generate_superperiodic_lattice(self.atom_1, n,-m,nprim,mprim)
         top_layer.positions[:,2] += self.ILS / 2
-        top_layer = self.rotate_atoms(top_layer, self.angle/2)
+
         #bottom layer has different lattice vectors
         self.atom_2.rotate(30,'z',rotate_cell=True)
+        atom2 = self.atom_2.copy()
+
+        if self.angle > 30.0:
+
+            atom2.rotate(60, 'z', rotate_cell=False)
+            #dp = (atom2.cell[0] * 2/3 + atom2.cell[1]/3)
+            #atom2.positions[:,:2] += dp[:2]
+
+        top_layer = self.rotate_atoms(top_layer, angle/2)
         nprim = n; mprim = n+m
-        bottom_layer = self.generate_superperiodic_lattice(self.atom_2, m,-n,nprim,mprim)
+        bottom_layer = self.generate_superperiodic_lattice(atom2, m,-n,nprim,mprim)
         bottom_layer.positions[:,2] -= self.ILS / 2
-        bottom_layer = self.rotate_atoms(bottom_layer, -self.angle/2)
+        bottom_layer = self.rotate_atoms(bottom_layer, -angle/2)
         a11 = np.linalg.norm(top_layer.cell, axis=-1)[0]
         a22 = np.linalg.norm(bottom_layer.cell, axis=-1)[0]
-        
+
         print(a11,a22)
         
         if a11 > a22:
@@ -357,7 +373,6 @@ class twisted_tmd:
         #this can be same
         #self.atom_2.rotate(30,'z',rotate_cell=True)
         
-        nprim = n; mprim = n+m
         bottom_layer = self.atom_2
         bottom_layer.positions[:,2] -= self.ILS / 2
         
