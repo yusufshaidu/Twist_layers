@@ -16,7 +16,8 @@ def main(chem_form_1, chem_form_2,
          hbn, nat_prim,
          outfile,
          bilayer,
-         stacking):
+         stacking,
+         n_hbn):
    
 
     if chem_form_1 in ['BN', 'C2', 'graphene', 'c2', 'hbn', 'bn']:
@@ -35,7 +36,7 @@ def main(chem_form_1, chem_form_2,
                    thickness=width_1,thickness2=width_2, 
                    stacking=stacking, ILS=ILS)
     else:
-        twist_atoms = twisted_tmd(atom1, atom2, angle, ILS, nat_prim)
+        twist_atoms = twisted_tmd(atom1, atom2, angle, ILS, nat_prim, n_hbn)
         if angle != 0.0:
             if chem_form_1 == chem_form_2:
                 atoms = twist_atoms.generate_moire_lattice_homo(hbn=hbn)
@@ -78,6 +79,7 @@ if __name__ == '__main__':
     outfile = configs['outfile']
     bilayer = configs['bilayer']
     stacking = configs['stacking']
+    n_hbn = configs['n_hbn']
             
     main(chem_form_1, chem_form_2, 
          alat_1, alat_2, 
@@ -87,4 +89,5 @@ if __name__ == '__main__':
          hbn, nat_prim,
          outfile,
          bilayer,
-         stacking)
+         stacking,
+         n_hbn)

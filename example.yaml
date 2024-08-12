@@ -17,3 +17,4 @@ nat_prim: 3
 outfile: twisted_lattice_angle_16.1_at_dAA.vasp
 bilayer: False
 stacking: AA
+n_hbn: 3

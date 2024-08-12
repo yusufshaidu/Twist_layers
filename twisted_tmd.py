@@ -10,12 +10,13 @@ class twisted_tmd:
        We follow closely the approach presented in PHYSICAL REVIEW B 90, 155451 (2014)
        use case: twisted bilayer graphene, bilayer TMD, TMD on hBN substrate ...
     '''
-    def __init__(self,atom1,atom2, angle,ILS,nat_prim=3):
+    def __init__(self,atom1,atom2, angle,ILS,nat_prim=3, n_hbn=1):
         self.atom_1 = atom1
         self.atom_2 = atom2
         self.angle = angle
         self.ILS = ILS
         self.nat_prim = nat_prim
+        self.n_hbn = n_hbn
         
     def compute_angle(self, n):
         '''
@@ -229,10 +230,8 @@ class twisted_tmd:
 
         print(a11,a22)
         
-        if a11 > a22:
-            cell =  top_layer.cell
-        else:
-            cell =  bottom_layer.cell
+        cell =  0.5* (bottom_layer.cell + top_layer.cell)
+        
         scaled_positions = top_layer.get_scaled_positions()
         scaled_positions = np.append(scaled_positions, bottom_layer.get_scaled_positions())
         scaled_positions = np.reshape(scaled_positions, [-1,3])
@@ -251,12 +250,32 @@ class twisted_tmd:
             
             zmin_tmd = np.min(bottom_layer.positions[:,2])
             zmin_hbn = np.min(atoms_hbn.positions[:,2])
-            atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.4)
+            atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.33)
             atoms_hbn = atoms_hbn.repeat((nr,nr,1))
-            scaled_positions = np.append(scaled_positions, atoms_hbn.get_scaled_positions())
+
+            for n in range(self.n_hbn):
+                _atom = atoms_hbn.copy()
+                if n % 2 == 1:
+                    _atom.rotate(60, 'z', rotate_cell=False)
+                    _atom.positions[:,2] -= 3.33 * n
+                    dp = (_atom.cell[0] * 2/3 + _atom.cell[1]/3)
+                    _atom.positions[:,:2] += dp[:2]
+                else:
+                    _atom.positions[:,2] -= 3.33 * n
+
+                    
+                s_positions = _atom.get_scaled_positions()
+                scaled_positions = np.append(scaled_positions,  s_positions )
+                symbols += list(_atom.symbols)
+            
             scaled_positions = np.reshape(scaled_positions, [-1,3])
-            symbols += list(atoms_hbn.symbols)
+            
             atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
+            pmin = np.min(atoms.positions[:,2])
+            pmax = np.max(atoms.positions[:,2])
+            c = pmax-pmin + 15.0
+            atoms.cell[2,2] = c
+
         return atoms
                 
     def minimize_strain(self, a1,a2,eps=.01):
@@ -310,7 +329,6 @@ class twisted_tmd:
         top_layer = self.generate_superperiodic_lattice(atom_1, n1,-m1,nprim,mprim)
         top_layer.positions[:,2] += self.ILS / 2
         top_layer = self.rotate_atoms(top_layer, self.angle/2)
-        write('test.vasp', top_layer)
         #this should be different
         atom_2.rotate(30,'z',rotate_cell=True)
         #bottom layer has different lattice vectors
@@ -318,7 +336,6 @@ class twisted_tmd:
         bottom_layer = self.generate_superperiodic_lattice(atom_2, m2,-n2,nprim,mprim)
         bottom_layer.positions[:,2] -= self.ILS / 2
         bottom_layer = self.rotate_atoms(bottom_layer, -self.angle/2)
-        write('test2.vasp', bottom_layer)
         #minimize the angle betwee
         a1 = np.linalg.norm(top_layer.cell, axis=-1)[0]
         a2 = np.linalg.norm(bottom_layer.cell, axis=-1)[0]
@@ -328,10 +345,8 @@ class twisted_tmd:
         print(f'lattice parameters at strain {strain} upon relaxations are top {a1} and bottom {a2}')
         
         
-        if a1 > a2:
-            cell =  top_layer.cell
-        else:
-            cell =  bottom_layer.cell
+        cell =  bottom_layer.cell + top_layer.cell
+        cell *= 0.5
         scaled_positions = top_layer.get_scaled_positions()
         scaled_positions = np.append(scaled_positions, bottom_layer.get_scaled_positions())
         scaled_positions = np.reshape(scaled_positions, [-1,3])
@@ -345,20 +360,39 @@ class twisted_tmd:
             z_len = cell[2,2]
             atoms_hbn = graphene('BN', a=2.504, vacuum=z_len/2.0)
 
-            a22 = n2*a2
+            a22 = a2
             ahbn = 2.504
             nr = round(a22/ahbn)
             strain = np.abs(1 - a22 / (nr*ahbn))
             
             zmin_tmd = np.min(bottom_layer.positions[:,2])
             zmin_hbn = np.min(atoms_hbn.positions[:,2])
-            atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.4)
+            atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.33)
             atoms_hbn = atoms_hbn.repeat((nr,nr,1))
-            scaled_positions = np.append(scaled_positions, atoms_hbn.get_scaled_positions())
+            print(f'total number of hbn atoms: {len(atoms_hbn.positions)*self.n_hbn} and strain {strain}')
+
+            for n in range(self.n_hbn):
+                _atom = atoms_hbn.copy()
+                if n % 2 == 1:
+                    _atom.rotate(60, 'z', rotate_cell=False)
+                    _atom.positions[:,2] -= 3.33 * n
+                    dp = (_atom.cell[0] * 2/3 + _atom.cell[1]/3)
+                    _atom.positions[:,:2] += dp[:2]
+                else:
+                    _atom.positions[:,2] -= 3.33 * n
+
+
+                s_positions = _atom.get_scaled_positions()
+                scaled_positions = np.append(scaled_positions,  s_positions)
+                symbols += list(_atom.symbols)
+
             scaled_positions = np.reshape(scaled_positions, [-1,3])
-            symbols += list(atoms_hbn.symbols)
+
             atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
-            
+            pmin = np.min(atoms.positions[:,2])
+            pmax = np.max(atoms.positions[:,2])
+            c = pmax-pmin + 15.0
+            atoms.cell[2,2] = c
         return atoms
     
     def generate_moire_lattice_at_zero_twist(self, eps, hbn=False):
@@ -391,10 +425,13 @@ class twisted_tmd:
         a2 = np.linalg.norm(bottom_layer.cell, axis=-1)[0]
         
         
-        if a1 > a2:
-            cell =  top_layer.cell
-        else:
-            cell =  bottom_layer.cell
+        #if a1 > a2:
+        #    cell =  top_layer.cell
+        #else:
+        #    cell =  bottom_layer.cell
+        cell =  bottom_layer.cell + top_layer.cell
+        cell *= 0.5
+
         scaled_positions = top_layer.get_scaled_positions()
         scaled_positions = np.append(scaled_positions, bottom_layer.get_scaled_positions())
         scaled_positions = np.reshape(scaled_positions, [-1,3])
@@ -413,10 +450,29 @@ class twisted_tmd:
             
             zmin_tmd = np.min(bottom_layer.positions[:,2])
             zmin_hbn = np.min(atoms_hbn.positions[:,2])
-            atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.4)
+            atoms_hbn.positions[:,2] -= (zmin_hbn-zmin_tmd + 3.33)
             atoms_hbn = atoms_hbn.repeat((nr,nr,1))
-            scaled_positions = np.append(scaled_positions, atoms_hbn.get_scaled_positions())
+            for n in range(self.n_hbn):
+                _atom = atoms_hbn.copy()
+                if n % 2 == 1:
+                    _atom.rotate(60, 'z', rotate_cell=False)
+                    _atom.positions[:,2] -= 3.33 * n
+                    dp = (_atom.cell[0] * 2/3 + _atom.cell[1]/3)
+                    _atom.positions[:,:2] += dp[:2]
+                else:
+                    _atom.positions[:,2] -= 3.33 * n
+
+
+                s_positions = _atom.get_scaled_positions()
+                scaled_positions = np.append(scaled_positions,  s_positions)
+                symbols += list(_atom.symbols)
+
             scaled_positions = np.reshape(scaled_positions, [-1,3])
-            symbols += list(atoms_hbn.symbols)
+
             atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
+            pmin = np.min(atoms.positions[:,2])
+            pmax = np.max(atoms.positions[:,2])
+            c = pmax-pmin + 15.0
+            atoms.cell[2,2] = c
+
         return atoms
