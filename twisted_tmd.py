@@ -111,17 +111,17 @@ class twisted_tmd:
         return n0
     
     def generate_superperiodic_lattice(self, atom, n,m,nprim,mprim):
-        
-        
+
+
         a1_sc = atom.cell[0] * n + atom.cell[1] * m
         a2_sc = atom.cell[0] * nprim + atom.cell[1] * mprim
         a_cell = np.array([a1_sc, a2_sc, atom.cell[2]])
         print(a_cell)
         #print(np.linalg.norm(a_cell, axis=-1))
-        
+
         idx = [n,m,nprim,mprim]
         print(f'expected number of for tmd atoms={(n**2+m**2+np.abs(n*m))*self.nat_prim}')
-        
+
         #get increaments
         d = []
         for i in idx:
@@ -129,52 +129,61 @@ class twisted_tmd:
                 d.append(-1)
             else:
                 d.append(1)
-        
+
         s_positions = []
         s_symb = []
         symb = list(atom.symbols)
-        # generate 
-        for k,p in enumerate(atom.positions):  
-            for i1 in range(0,n+d[0],d[0]):
-                for i2 in range(0,m+d[1],d[1]):
-                    for j1 in range(0,nprim+d[2],d[2]):
-                        for j2 in range(0,mprim+d[3],d[3]):
-                            ij1 = i1+j1
-                            ij2 = i2+j2
-                            #p_s = p0 + i1 * a1 + i2 * a2 + j1 * a1 + j2 * a2
-                            p_s = p + ij1 * atom.cell[0] + ij2 * atom.cell[1]
-                            #norm_coord = np.matmul(np.linalg.inv(a_cell.T), p_s) 
-                            #if np.max(norm_coord) > 1.0+1e-12:
-                            #    continue
-                                
-                            s_positions.append(p_s)
-                            s_symb.append(symb[k])
-                           
+        # generate
+        i1 = range(0,n+d[0],d[0])
+        i2 = range(0,m+d[1],d[1])
+        j1 = range(0,nprim+d[2],d[2])
+        j2 = range(0,mprim+d[3],d[3])
+        idx = np.array(list(itertools.product(i1,i2,j1,j2)))
 
-        #print(i,len(s_positions))
-        
+        ij1 = idx[:,0] + idx[:,2]
+        ij2 = idx[:,1] + idx[:,3]
+
+        #remove dublicates which are way too many in this approach
+
+        idx_sum = np.zeros((idx.shape[0], 2))
+        idx_sum[:,0] = ij1
+        idx_sum[:,1] = ij2
+
+        idx_sum = np.unique(idx_sum, axis=0)
+
+        ij1 = idx_sum[:,0]
+        ij2 = idx_sum[:,1]
+
+        for k,p in enumerate(atom.positions):
+
+
+            p_s = p + ij1[:,None] * atom.cell[0] + ij2[:,None] * atom.cell[1]
+
+            s_positions = np.append(s_positions, p_s)
+            s_symb = np.append(s_symb, [symb[k] for i in range(len(ij1))])
+
+            print(f'done with atoms: {k}')
+
         #extract atoms that live in the super periodic cell
+        s_positions = np.reshape(s_positions, [-1,3])
+        print('done generating points')
         atoms = Atoms(cell=a_cell,positions=s_positions,symbols=s_symb, pbc=True)
         atoms.wrap(pbc=True)
         in_positions = []
         in_symbols = []
+        nconf = len(atoms.get_scaled_positions())
         for i, p in enumerate(atoms.get_scaled_positions()):
             kk = 0
             p = (p+1e-12)%1.0
+            #    continue
             #check of atoms are already considers
-            for _p in in_positions:
-                delta = np.linalg.norm(p-_p)
-               
-                if delta < 1e-6:
-                    kk = 1
-                    break
-            if kk == 1:
-                continue
-            #if np.max(np.abs(p)) < 1.0-1e-12:
+            if in_positions:
+                delta = np.linalg.norm(p-in_positions, axis=-1)
+                if np.min(delta) < 1e-6:
+                    continue
+
             in_positions.append(p)
             in_symbols.append(atoms.symbols[i])
-                #print(np.max(p), p)
-        #print(len(pp))
         atoms = Atoms(cell=a_cell,scaled_positions=in_positions,symbols=in_symbols, pbc=True)
         return atoms
 
@@ -273,7 +282,7 @@ class twisted_tmd:
             atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
             pmin = np.min(atoms.positions[:,2])
             pmax = np.max(atoms.positions[:,2])
-            c = pmax-pmin + 15.0
+            c = pmax-pmin + 25.0
             atoms.cell[2,2] = c
 
         return atoms
@@ -391,7 +400,7 @@ class twisted_tmd:
             atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
             pmin = np.min(atoms.positions[:,2])
             pmax = np.max(atoms.positions[:,2])
-            c = pmax-pmin + 15.0
+            c = pmax-pmin + 25.0
             atoms.cell[2,2] = c
         return atoms
     
@@ -472,7 +481,7 @@ class twisted_tmd:
             atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
             pmin = np.min(atoms.positions[:,2])
             pmax = np.max(atoms.positions[:,2])
-            c = pmax-pmin + 15.0
+            c = pmax-pmin + 25.0
             atoms.cell[2,2] = c
 
         return atoms
