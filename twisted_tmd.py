@@ -187,6 +187,20 @@ class twisted_tmd:
         atoms = Atoms(cell=a_cell,scaled_positions=in_positions,symbols=in_symbols, pbc=True)
         return atoms
 
+    def minimize_strain(self, a1,a2,eps=.01):
+        '''reduce strain between two mismatch TMDs
+        '''
+        
+        
+        strain = np.abs(1 - a2/a1)
+        print(f'initial strain is {strain}')
+        for n1 in range(1,50):
+            for n2 in range(1,50):
+                strain = np.abs(1 - n2*a2/(n1*a1))
+                if strain < eps:
+                    print(strain)
+                    return n1,n2,strain
+
     def generate_moire_lattice_homo(self, hbn=False):
         '''compute twisted homobilayer TMD'''
         
@@ -268,7 +282,7 @@ class twisted_tmd:
                     _atom.rotate(60, 'z', rotate_cell=False)
                     _atom.positions[:,2] -= 3.33 * n
                     dp = (_atom.cell[0] * 2/3 + _atom.cell[1]/3)
-                    _atom.positions[:,:2] += dp[:2]
+                    _atom.positions[:,:2] += dp[:2] / nr
                 else:
                     _atom.positions[:,2] -= 3.33 * n
 
@@ -287,20 +301,7 @@ class twisted_tmd:
 
         return atoms
                 
-    def minimize_strain(self, a1,a2,eps=.01):
-        '''reduce strain between two mismatch TMDs
-        '''
-        
-        
-        strain = np.abs(1 - a2/a1)
-        print(f'initial strain is {strain}')
-        for n1 in range(1,50):
-            for n2 in range(1,50):
-                strain = np.abs(1 - n2*a2/(n1*a1))
-                if strain < eps:
-                    print(strain)
-                    return n1,n2,strain
-                
+                   
     def generate_moire_lattice_hetero(self, eps, hbn=False):
         '''compute twisted heterobilayer TMD
            In this case, we extend the PHYSICAL REVIEW B 90, 155451 (2014)
@@ -386,7 +387,7 @@ class twisted_tmd:
                     _atom.rotate(60, 'z', rotate_cell=False)
                     _atom.positions[:,2] -= 3.33 * n
                     dp = (_atom.cell[0] * 2/3 + _atom.cell[1]/3)
-                    _atom.positions[:,:2] += dp[:2]
+                    _atom.positions[:,:2] += dp[:2] / nr
                 else:
                     _atom.positions[:,2] -= 3.33 * n
 
@@ -467,7 +468,7 @@ class twisted_tmd:
                     _atom.rotate(60, 'z', rotate_cell=False)
                     _atom.positions[:,2] -= 3.33 * n
                     dp = (_atom.cell[0] * 2/3 + _atom.cell[1]/3)
-                    _atom.positions[:,:2] += dp[:2]
+                    _atom.positions[:,:2] += dp[:2] / nr
                 else:
                     _atom.positions[:,2] -= 3.33 * n
 
