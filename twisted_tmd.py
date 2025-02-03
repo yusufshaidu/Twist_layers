@@ -111,17 +111,12 @@ class twisted_tmd:
         return n0
     
     def generate_superperiodic_lattice(self, atom, n,m,nprim,mprim):
-
-
         a1_sc = atom.cell[0] * n + atom.cell[1] * m
         a2_sc = atom.cell[0] * nprim + atom.cell[1] * mprim
         a_cell = np.array([a1_sc, a2_sc, atom.cell[2]])
         print(a_cell)
-        #print(np.linalg.norm(a_cell, axis=-1))
-
         idx = [n,m,nprim,mprim]
         print(f'expected number of for tmd atoms={(n**2+m**2+np.abs(n*m))*self.nat_prim}')
-
         #get increaments
         d = []
         for i in idx:
@@ -129,7 +124,6 @@ class twisted_tmd:
                 d.append(-1)
             else:
                 d.append(1)
-
         s_positions = []
         s_symb = []
         symb = list(atom.symbols)
@@ -144,26 +138,17 @@ class twisted_tmd:
         ij2 = idx[:,1] + idx[:,3]
 
         #remove dublicates which are way too many in this approach
-
         idx_sum = np.zeros((idx.shape[0], 2))
         idx_sum[:,0] = ij1
         idx_sum[:,1] = ij2
-
         idx_sum = np.unique(idx_sum, axis=0)
-
         ij1 = idx_sum[:,0]
         ij2 = idx_sum[:,1]
-
         for k,p in enumerate(atom.positions):
-
-
             p_s = p + ij1[:,None] * atom.cell[0] + ij2[:,None] * atom.cell[1]
-
             s_positions = np.append(s_positions, p_s)
             s_symb = np.append(s_symb, [symb[k] for i in range(len(ij1))])
-
             print(f'done with atoms: {k}')
-
         #extract atoms that live in the super periodic cell
         s_positions = np.reshape(s_positions, [-1,3])
         print('done generating points')
@@ -181,7 +166,6 @@ class twisted_tmd:
                 delta = np.linalg.norm(p-in_positions, axis=-1)
                 if np.min(delta) < 1e-6:
                     continue
-
             in_positions.append(p)
             in_symbols.append(atoms.symbols[i])
         atoms = Atoms(cell=a_cell,scaled_positions=in_positions,symbols=in_symbols, pbc=True)

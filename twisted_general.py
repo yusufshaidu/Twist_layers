@@ -89,6 +89,67 @@ class twisted_general:
         self.n_hbn = n_hbn
         self.hbn_ILS = hbn_ILS
         self.hbn_top = hbn_top
+    def generate_superperiodic_lattice(self, atom, n,m,nprim,mprim):
+        a1_sc = atom.cell[0] * n + atom.cell[1] * m
+        a2_sc = atom.cell[0] * nprim + atom.cell[1] * mprim
+        a_cell = np.array([a1_sc, a2_sc, atom.cell[2]])
+        print(a_cell)
+        idx = [n,m,nprim,mprim]
+        print(f'expected number of for tmd atoms={(n**2+m**2+np.abs(n*m))*self.nat_prim}')
+        #get increaments
+        d = []
+        for i in idx:
+            if i < 0:
+                d.append(-1)
+            else:
+                d.append(1)
+        s_positions = []
+        s_symb = []
+        symb = list(atom.symbols)
+        # generate
+        i1 = range(0,n+d[0],d[0])
+        i2 = range(0,m+d[1],d[1])
+        j1 = range(0,nprim+d[2],d[2])
+        j2 = range(0,mprim+d[3],d[3])
+        idx = np.array(list(itertools.product(i1,i2,j1,j2)))
+
+        ij1 = idx[:,0] + idx[:,2]
+        ij2 = idx[:,1] + idx[:,3]
+
+        #remove dublicates which are way too many in this approach
+        idx_sum = np.zeros((idx.shape[0], 2))
+        idx_sum[:,0] = ij1
+        idx_sum[:,1] = ij2
+        idx_sum = np.unique(idx_sum, axis=0)
+        ij1 = idx_sum[:,0]
+        ij2 = idx_sum[:,1]
+        for k,p in enumerate(atom.positions):
+            p_s = p + ij1[:,None] * atom.cell[0] + ij2[:,None] * atom.cell[1]
+            s_positions = np.append(s_positions, p_s)
+            s_symb = np.append(s_symb, [symb[k] for i in range(len(ij1))])
+            print(f'done with atoms: {k}')
+        #extract atoms that live in the super periodic cell
+        s_positions = np.reshape(s_positions, [-1,3])
+        print('done generating points')
+        atoms = Atoms(cell=a_cell,positions=s_positions,symbols=s_symb, pbc=True)
+        atoms.wrap(pbc=True)
+        in_positions = []
+        in_symbols = []
+        nconf = len(atoms.get_scaled_positions())
+        for i, p in enumerate(atoms.get_scaled_positions()):
+            kk = 0
+            p = (p+1e-12)%1.0
+            #    continue
+            #check of atoms are already considers
+            if in_positions:
+                delta = np.linalg.norm(p-in_positions, axis=-1)
+                if np.min(delta) < 1e-6:
+                    continue
+            in_positions.append(p)
+            in_symbols.append(atoms.symbols[i])
+        atoms = Atoms(cell=a_cell,scaled_positions=in_positions,symbols=in_symbols, pbc=True)
+        return atoms
+
     def compute_transformation_parameters_abcd(self, atom_1, atom_2):
         '''This takes in already twisted lattices'''
         
@@ -209,73 +270,9 @@ class twisted_general:
         print()
         print(len(I), 'strains',np.abs(a_approx-a), np.abs(b_approx-b), np.abs(c_approx-c), np.abs(d_approx-d))
         
-        top_layer = self.repeat_cell(atom_1, 4*Io[0], 4*Io[1])
-        bottom_layer = self.repeat_cell(atom_2, 4*Is[0], 4*Is[1])
-        
-           
-        R11 = Io[0] * atom_1.cell[0] + Io[1] * atom_1.cell[1]
-        R12 = Is[0] * atom_2.cell[0] + Is[1] * atom_2.cell[1]
-        R21 = Io[2] * atom_1.cell[0] + Io[3] * atom_1.cell[1]
-        R22 = Is[2] * atom_2.cell[0] + Is[3] * atom_2.cell[1]
-       
-        cell1 = np.array([
-            R11,
-            R21,
-            atom_1.cell[2]])
-        cell2 = np.array([
-            R12,
-            R22,
-            atom_2.cell[2]])
-        
-        cell = 0.5*(cell1+cell2)
-        #print('cell', cell1,cell2,cell)
-        spos_t = []
-        pos_t = []
-        symb_t = []
-        
-        top_layer = Atoms(cell=cell1, positions=top_layer.positions, symbols=top_layer.symbols, pbc=True)
-        
-        for k,p in enumerate(top_layer.positions):
-            if len(pos_t) == 0:
-                dist = 1e6
-            else:
-            
-                _, dist = get_distances(p, p2=np.array(pos_t), cell=cell1, pbc=True)
-                dist = dist.min()
-            
-            #scaled_p = np.linalg.inv(cell1.T) @ p
-                
-            if dist > 0.1: # and np.all(np.abs(scaled_p)<1.0):
-                pos_t.append(p)
-                symb_t.append(top_layer.symbols[k])
-                #print(dist)
-            
-                
-            
-        top_layer = Atoms(cell=cell, positions=pos_t, symbols=symb_t, pbc=True)
-        #print(top_layer.get_global_number_of_atoms())
-        
-        pos_b = []
-        symb_b = []
-        spos_b = []
-        bottom_layer = Atoms(cell=cell2, positions=bottom_layer.positions, symbols=bottom_layer.symbols, pbc=True)
-        for k,p in enumerate(bottom_layer.positions):
-            if len(pos_b) == 0:
-                dist = 1e6
-            else:
-                #print(p, pos_t)
-                _, dist = get_distances(p, p2=np.array(pos_b), cell=cell2, pbc=True)
-                dist = dist.min()
-                
-            #scaled_p = np.linalg.inv(cell2.T) @ p
-                        
-            if dist > 0.1:# and np.all(np.abs(scaled_p)<1.0):
-                pos_b.append(p)
-                symb_b.append(bottom_layer.symbols[k])
-                #print(dist)
-            
-        
-        bottom_layer = Atoms(cell=cell, positions=pos_b, symbols=symb_b, pbc=True)
+        top_layer = self.generate_superperiodic_lattice(atom_1, *Io)
+        bottom_layer = self.generate_superperiodic_lattice(atom_2, *Is)
+
         top_layer.positions[:,2] += self.ILS/2
         width = top_layer.positions[:,2].max()-top_layer.positions[:,2].min()
         bottom_layer.positions[:,2] -= (self.ILS/2 + width)
