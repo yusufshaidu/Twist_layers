@@ -4,47 +4,31 @@ from ase.build import mx2
 from ase.io import read,write
 from ase import Atoms
 from ase.build import graphene
-import itertools
+import itertools, time
 from ase.build import make_supercell
-from numba import jit, int32, float32
+from numba import jit, int32, float32, prange
 from ase.geometry import get_distances
-from mpi4py import MPI
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-size = comm.Get_size()
-#print(size,rank)
-#@jit(float32(float32,float32,
-#             float32,float32,
-#             float32,float32))
+
+#c++ codes with openmpi support
+import approximate_I_omp_module
 
 @jit(['int32[:,:](float32,float32,float32,float32,int32,float32)'],
-     nopython=True,nogil=True,
+     nopython=True,parallel=True,
     )
 def _compute_approximate_I(a_exact, b_exact, 
                              c_exact, d_exact, 
                              nmax, tol):
     '''compute ijkl, mnqr that satisfy the commensurability condition'''
-    
-
-    
-
-    #print(size)
-    #print(range(nmax))
-    #nmax = int(nmax)
-    i_range = range(-nmax,nmax+1)
+    i_range = prange(-nmax,nmax+1)
     j_range = range(-nmax,nmax+1)
     k_range = range(-nmax,nmax+1)
     l_range = range(-nmax,nmax+1)
-    #k_range = range(1,nmax+1)
-    #l_range = range(1,nmax+1)
 
     m_range = range(-nmax,nmax+1)
     n_range = range(-nmax,nmax+1)
     q_range = range(-nmax,nmax+1)
     r_range = range(-nmax,nmax+1)
     
-    #q_range = range(1,nmax+1)
-    #r_range = range(1,nmax+1)
     I = []
      
     #print(16*nmax**8)
@@ -53,33 +37,40 @@ def _compute_approximate_I(a_exact, b_exact,
         for j in j_range:
             for k in k_range:
                 for l in l_range:
+                    det = i*l - j*k
+                    if abs(det)<1e-6 or 0 in [i,j,k,l]:
+                        continue
                     for m in m_range:
                         for n in n_range:
                             for q in q_range:
                                 for r in r_range:
                                     
-                                    det = i*l - j*k
-                                    #det2 = m*r - n*q
-                                    if abs(det) < 1e-6 or 0 in [i,j,k,l,m,n,q,r]:
+                                    det2 = m*r - n*q
+                                    if abs(det2)<1e-6 or 0 in [m,n,q,r]:
                                         continue
 
                                     a = (l*m - j*q) / det
                                     b = (l*n - j*r) / det
                                     c = (-k*m + i*q) / det
                                     d = (-k*n + i*r) / det
+                                    error = -1e-9
                                     da = abs(a-a_exact)
+                                    error = max(error,da)
                                     db = abs(b-b_exact)
+                                    error = max(error,db)
                                     dc = abs(c-c_exact)
+                                    error = max(error,dc)
                                     dd = abs(d-d_exact)
+                                    error = max(error,dd)
 
-                                    error = max([da,db,dc,dd])
+                                    #error = max([da,db,dc,dd])
                                     if error < tol:
                                         #print(i,j,k,l,m,n,q,r, error)
                                         I.append([i,j,k,l,m,n,q,r])
                                         error0 = error
-                                        dpar = [da,db,dc,dd]
+    #                                    dpar = [da,db,dc,dd]
     I = np.array(I, dtype=np.int32)
-    print('error reached',error0, 'tol=', tol, 'the number of solutions: ', len(I), 'da,db,dc,dd=: ', dpar)
+    #print('error reached',error0, 'tol=', tol, 'the number of solutions: ', len(I), 'da,db,dc,dd=: ', dpar)
     return I
 
 
@@ -116,6 +107,7 @@ class twisted_general:
         a,b = np.linalg.solve(mat_B, v1)
         c,d = np.linalg.solve(mat_B, v2)
         return [a,b,c,d]
+
     def minimize_moire_area(self, atom_1, atom_2, I):
         Ao_prim = np.linalg.norm(np.cross(atom_1.cell[0], atom_1.cell[1]))
         As_prim = np.linalg.norm(np.cross(atom_2.cell[0], atom_2.cell[1]))
@@ -124,18 +116,23 @@ class twisted_general:
         Io = []
         As_min = 1e9
         Is = []
-        
+         
         for _I in I:
             i,j,k,l,m,n,q,r = _I
             loss = np.abs(i*l - k*j)
-            if loss < Ao_min:
+            loss_o = np.abs(m*r - q*n)
+            if loss - Ao_min < 1e-6 or np.abs(m*r - q*n) - As_min<1e-6:
                 Ao_min = loss
+                As_min = loss_o
                 Io = [i,j,k,l]
-        
-            loss = np.abs(m*r - q*n)
-            if loss < As_min:
-                As_min = loss
                 Is = [m,n,q,r]
+                print('Io',Io, Ao_min,'Is',Is, As_min )
+        
+            #loss = np.abs(m*r - q*n)
+            #if loss - As_min < 1e-6:
+            #    As_min = loss
+            #    Is = [m,n,q,r]
+            #    print(Is, As_min)
         No = atom_1.get_global_number_of_atoms() * Ao_min
         Ns = atom_2.get_global_number_of_atoms() * As_min
         return Io,Is, Ao_prim*Ao_min, As_min*As_prim, No, Ns
@@ -144,10 +141,11 @@ class twisted_general:
     def compute_approximate_I(self, a_exact, b_exact, 
                              c_exact, d_exact, 
                              nmax, tol): 
-    
+        #return approximate_I_omp_module.compute_approximate_I(a_exact, 
+        #        b_exact, c_exact, d_exact, nmax, tol)    
         return _compute_approximate_I(a_exact, b_exact, 
                              c_exact, d_exact, 
-                             nmax, tol)
+                            nmax, tol)
     def repeat_cell(self,atoms, n,m):
 
         all_pos = []
@@ -194,11 +192,22 @@ class twisted_general:
         
         atom_2.rotate(-angle/2,'z',rotate_cell=True) 
         a,b,c,d = self.compute_transformation_parameters_abcd(atom_1, atom_2)
-               
+        time0 = time.time()  
         I = self.compute_approximate_I(a,b,c,d,nmax,eps)
+        print('total time spent search for commensurate lattice: ', time.time()-time0)
         Io,Is,Ao,As,No,Ns = self.minimize_moire_area(atom_1, atom_2, I)
         
+        i,j,k,l = Io
+        m,n,q,r = Is
+        det = i*l-k*j
+        a_approx = (l*m - j*q) / det
+        b_approx = (l*n - j*r) / det
+        c_approx = (-k*m + i*q) / det
+        d_approx = (-k*n + i*r) / det
+
         print(a,b,c,d, Io,Is,Ao,As,No,Ns)
+        print()
+        print(len(I), 'strains',np.abs(a_approx-a), np.abs(b_approx-b), np.abs(c_approx-c), np.abs(d_approx-d))
         
         top_layer = self.repeat_cell(atom_1, 4*Io[0], 4*Io[1])
         bottom_layer = self.repeat_cell(atom_2, 4*Is[0], 4*Is[1])

@@ -1,0 +1,8 @@
+#install pybind11
+pip install pybind11
+
+#compile the cpp code and include pybind11 packages
+
+g++ -O3 -Wall -shared -std=c++14 -fPIC $(python3 -m pybind11 --includes) approximate_I_omp.cpp -o approximate_I_omp_module$(python3-config --extension-suffix) -fopenm
+
+

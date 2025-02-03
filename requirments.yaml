@@ -2,3 +2,5 @@
 - ase
 - argparse
 - yaml
+- pybind11
+- numba # This is not used since we have replaced the 
