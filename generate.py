@@ -9,6 +9,30 @@ from twisted_tmd import twisted_tmd
 from bilayer_systems import bilayer_systems
 from twisted_general import twisted_general
 import warnings
+def default_configs():
+    configs = {}
+    configs['chem_form_1'] = None
+    configs['chem_form_2'] = None
+    configs['alat_1'] = None
+    configs['alat_2'] = None
+    configs['thickness_1'] = -1
+    configs['thickness_2'] = -1
+    configs['vacuum'] = 15
+    configs['twist_angle'] = None
+    configs['ILS'] = 3.35
+    configs['strain_threshold'] = 0.01
+    configs['hbn'] = False
+    configs['nat_prim'] = 3
+    configs['outfile'] = 'systes.vasp'
+    configs['bilayer'] = False
+    configs['stacking'] = 'AB' 
+    
+    
+    configs['n_hbn'] = 0
+
+    configs['nmax'] = 5
+    configs['format'] = 'chem_form' 
+    return configs
 
 def check_hexagonal(atom1,atom2):
     ang1 = np.arccos(np.dot(atom1.cell[0], atom1.cell[1]) 
@@ -92,8 +116,12 @@ if __name__ == '__main__':
     with open(args.config) as f:
         configs = yaml.safe_load(f)
 
-    print(configs)
-    
+    #print(configs)
+    _configs = default_configs()
+    for key in _configs.keys():
+        if key not in configs:
+            configs[key] = _configs[key]
+
     chem_form_1 = configs['chem_form_1']
     chem_form_2 = configs['chem_form_2']
     alat_1 = configs['alat_1']
