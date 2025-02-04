@@ -19,6 +19,7 @@ def _compute_approximate_I(a_exact, b_exact,
                              c_exact, d_exact, 
                              nmax, tol):
     '''compute ijkl, mnqr that satisfy the commensurability condition'''
+
     i_range = prange(-nmax,nmax+1)
     j_range = range(-nmax,nmax+1)
     k_range = range(-nmax,nmax+1)
@@ -32,13 +33,14 @@ def _compute_approximate_I(a_exact, b_exact,
     I = []
      
     #print(16*nmax**8)
+
     error0 = 1e9
     for i in i_range:
         for j in j_range:
             for k in k_range:
                 for l in l_range:
                     det = i*l - j*k
-                    if abs(det)<1e-6 or 0 in [i,j,k,l]:
+                    if abs(det)<1e-6 or abs(i*j*k*l) < 1e-4: # make sure that the area is finite
                         continue
                     for m in m_range:
                         for n in n_range:
@@ -46,7 +48,7 @@ def _compute_approximate_I(a_exact, b_exact,
                                 for r in r_range:
                                     
                                     det2 = m*r - n*q
-                                    if abs(det2)<1e-6 or 0 in [m,n,q,r]:
+                                    if abs(det2)<1e-6 or abs(m*n*q*r) < 1e-4:
                                         continue
 
                                     a = (l*m - j*q) / det
