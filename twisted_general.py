@@ -67,7 +67,7 @@ def _compute_approximate_I(a_exact, b_exact,
                                     if error < tol:
                                         #print(i,j,k,l,m,n,q,r, error)
                                         I.append([i,j,k,l,m,n,q,r])
-                                        error0 = error
+                                        #error0 = error
     #                                    dpar = [da,db,dc,dd]
     I = np.array(I, dtype=np.int32)
     #print('error reached',error0, 'tol=', tol, 'the number of solutions: ', len(I), 'da,db,dc,dd=: ', dpar)
@@ -92,10 +92,11 @@ class twisted_general:
     def generate_superperiodic_lattice(self, atom, n,m,nprim,mprim):
         a1_sc = atom.cell[0] * n + atom.cell[1] * m
         a2_sc = atom.cell[0] * nprim + atom.cell[1] * mprim
+        nat_prim = atom.get_global_number_of_atoms()
         a_cell = np.array([a1_sc, a2_sc, atom.cell[2]])
         print(a_cell)
         idx = [n,m,nprim,mprim]
-        print(f'expected number of for tmd atoms={(n**2+m**2+np.abs(n*m))*self.nat_prim}')
+        print(f'expected number of in this layer is={(np.abs(n*mprim-m*nprim))*nat_prim}')
         #get increaments
         d = []
         for i in idx:
@@ -181,10 +182,10 @@ class twisted_general:
         for _I in I:
             i,j,k,l,m,n,q,r = _I
             loss = np.abs(i*l - k*j)
-            loss_o = np.abs(m*r - q*n)
-            if loss - Ao_min < 1e-6 or np.abs(m*r - q*n) - As_min<1e-6:
+            loss_s = np.abs(m*r - q*n)
+            if loss - Ao_min < 1e-6 and loss_s - As_min<1e-6:
                 Ao_min = loss
-                As_min = loss_o
+                As_min = loss_s
                 Io = [i,j,k,l]
                 Is = [m,n,q,r]
                 print('Io',Io, Ao_min,'Is',Is, As_min )
