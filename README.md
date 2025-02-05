@@ -12,7 +12,8 @@ that gives the specified angle and has strain less than the user specified thres
 # For a general case
 
 I implement a code for a generate twisted case following the report in https://arxiv.org/pdf/2104.09591
--- Note: This code is slower because of the $N^8$ scaling to generate the 8 indices for the moire supercell.
+
+- Note: This code is slower because of the $N^8$ scaling to generate the 8 indices for the moire supercell.
 We have implemented two parallelization scheme namely: (1) using numba and (2) writing a c++ inerface and employing openmpi pragma
 
 On my computer, with 4 processors, numba is twice faster than the cpp code.
@@ -23,4 +24,4 @@ The codes reads a yaml file that contains information about the two layers. Plea
 
 To run the code use the following command:
 
-`python3 path/to/generate.py -c file.yaml
+```python3 path/to/generate.py -c file.yaml```
