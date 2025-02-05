@@ -268,10 +268,17 @@ class twisted_general:
         b_approx = (l*n - j*r) / det
         c_approx = (-k*m + i*q) / det
         d_approx = (-k*n + i*r) / det
+        a1_exact  = np.linalg.norm(a*atom_2.cell[0] + b*atom_2.cell[1])
+        a1_approx  = np.linalg.norm(a_approx*atom_2.cell[0] + b_approx*atom_2.cell[1])
+
+        a2_exact  = np.linalg.norm(c*atom_2.cell[0] + d*atom_2.cell[1])
+        a2_approx  = np.linalg.norm(c_approx*atom_2.cell[0] + d_approx*atom_2.cell[1])
+        a1,a2,_ = np.linalg.norm(atom_1.cell, axis=-1)
 
         print(a,b,c,d, Io,Is,Ao,As,No,Ns)
-        print()
-        print(len(I), 'strains',np.abs(a_approx-a), np.abs(b_approx-b), np.abs(c_approx-c), np.abs(d_approx-d))
+        print('number of solutions found=:', len(I))
+        print('strain along a1',np.abs(a1_exact-a1_approx)/a1_exact*100, 'change due to transformation:', a1-a1_exact)
+        print('strain along a2',np.abs(a2_exact-a2_approx)/a2_exact*100, 'change due to transformation', a2-a2_exact)
         
         top_layer = self.generate_superperiodic_lattice(atom_1, *Io)
         bottom_layer = self.generate_superperiodic_lattice(atom_2, *Is)
