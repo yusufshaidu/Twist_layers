@@ -16,11 +16,11 @@ I implement a code for a generate twisted case following the report in https://a
 - Note: This code is slower because of the $N^8$ scaling to generate the 8 indices for the moire supercell.
 We have implemented two parallelization scheme namely: (1) using numba and (2) writing a c++ inerface and employing openmpi pragma
 
-On my computer, with 4 processors, numba is twice faster than the cpp code.
+On my computer, numba is twice faster than the cpp code.
 
 # Running the code
 
-The codes reads a yaml file that contains information about the two layers. Please check the example.yaml for reeference.
+The code reads a yaml file that contains information about the two layers. Please check the example.yaml for reference.
 
 To run the code use the following command:
 
