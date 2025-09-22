@@ -13,7 +13,7 @@ that gives the specified angle and has strain less than the user specified thres
 
 I implement a code for a generate twisted case following the report in https://arxiv.org/pdf/2104.09591
 
-- Note: This code is slower because of the $N^8$ scaling to generate the 8 indices for the moire supercell.
+- Note: This code is slower because of the $N^8$ scaling to generate the 8 indices for the moire supercell [this has been reduced to $N^4$: Please watch out!!!!!].
 We have implemented two parallelization scheme namely: (1) using numba and (2) writing a c++ inerface and employing openmpi pragma
 
 On my computer, numba is twice faster than the cpp code.
