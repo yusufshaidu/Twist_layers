@@ -1,0 +1,38 @@
+#chemical formular or ase readable filepath of layer 1 
+chem_form_1: ../CrSBr_monolayer_vac_car.cif
+#chemical formular or ase readable filepath of layer 2 
+chem_form_2: ../CrSBr_monolayer_vac_car.cif
+#chem_form_2: MoS2
+#lattice parameter of layer 1 if generated with ASE
+#alat_1: 3.146
+#alat_2: 3.146
+#lattice parameter of layer 2 if generated with ASE
+#alat_2: 3.267
+#thickness of layer 1 if generated with ASE
+thickness_1: -1
+thickness_2: -1
+#thikness of layer 2 if generated with ASE
+#thickness_2: 3.33
+# vacuum layers
+vacuum: 15
+#twist angle in degrees
+twist_angle: 74.1
+#avarege interlayer spacing: M-M distance for hexagonal TMD and the actual interlayer spacing for other type of nilayers
+ILS: 3.3
+#strain substrates for heterostructures and general nonhexagonal lattice
+strain_threshold: 0.005 # in ?? something
+# decide whether to generate structure with hbn substrate
+hbn: False
+# number of atoms in the primitive cell
+nat_prim: 6
+nmax: 20
+#outfile: MoS2-MoSe2_twist_angle_27.8.vasp
+#output file to write the generated structures
+outfile: test_new.vasp
+bilayer: False
+#stacking for untwisted bilayer systems
+#stacking: AA
+#add hbn: only available for hexagonal systems
+#n_hbn: 3
+#input format: it is 'file' if layers are read from file or 'chem_form' if layers are generated within ase
+format: file
