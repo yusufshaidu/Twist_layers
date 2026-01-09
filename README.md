@@ -21,4 +21,4 @@ The code reads a yaml file that contains information about the two layers. Pleas
 
 To run the code use the following command:
 
-```python3 path/to/generate.py -c file.yaml```
+```python3 path/to/twistlayers.py -c file.yaml```
