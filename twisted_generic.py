@@ -6,171 +6,157 @@ from ase import Atoms
 from ase.build import graphene
 import itertools, time
 from ase.build import make_supercell
-from numba import jit, int32, float32, prange
+from numba import jit, int32, float32, prange, njit
 from ase.geometry import get_distances
 import math
 #c++ codes with openmpi support
 #import approximate_I_omp_module
+from math import gcd
 
-@jit(['int32[:,:](float32,float32,float32,float32,int32,float32)'],
-     nopython=True,parallel=True,
-    )
-def _compute_approximate_I(a_exact, b_exact, 
-                             c_exact, d_exact, 
+@njit
+def gcd4(i,j,k,l):
+    return gcd(gcd(i,j), gcd(k,l))
+@njit
+def enumerate_blocks(nmax):
+    blocks = []
+    for i in range(-nmax, nmax+1):
+        for j in range(-nmax, nmax+1):
+            for k in range(-nmax, nmax+1):
+                for l in range(-nmax, nmax+1):
+                    det = i*k - j*l
+                    cond = (i != 0 and j != 0 and k != 0 and l != 0)
+                    if det != 0 and cond and gcd4(i,j,k,l)==1:
+                        blocks.append((i,j,k,l,det))
+    return blocks
+
+
+@njit
+def _compute_approximate_I_opt(a_exact, b_exact,
+                             c_exact, d_exact,
                              nmax, tol):
-    '''compute ijkl, mnqr that satisfy the commensurability condition'''
 
-    i_range = prange(-nmax,nmax+1)
-    j_range = range(-nmax,nmax+1)
-    k_range = range(-nmax,nmax+1)
-    l_range = range(-nmax,nmax+1)
+    ijkl_blocks = enumerate_blocks(nmax)
+    mnqr_blocks = enumerate_blocks(nmax)
 
-    m_range = range(-nmax,nmax+1)
-    n_range = range(-nmax,nmax+1)
-    q_range = range(-nmax,nmax+1)
-    r_range = range(-nmax,nmax+1)
-    
     I = []
-     
-    #print(16*nmax**8)
+    for idx in prange(len(ijkl_blocks)):
+        i,j,k,l,detA = ijkl_blocks[idx]
+        detA_abs = abs(detA)
+        bound = tol * detA_abs
 
-    error0 = 1e9
-    for i in i_range:
-        for j in j_range:
-            for k in k_range:
-                for l in l_range:
-                    det = i*l - j*k
-                    if abs(det)<1e-6 or abs(i*j*k*l) < 1e-4: # make sure that the area is finite
-                        continue
-                    for m in m_range:
-                        for n in n_range:
-                            for q in q_range:
-                                for r in r_range:
-                                    
-                                    det2 = m*r - n*q
-                                    if abs(det2)<1e-6 or abs(m*n*q*r) < 1e-4:
-                                        continue
+        for m,n,q,r,_ in mnqr_blocks:
 
-                                    a = (l*m - j*q) / det
-                                    b = (l*n - j*r) / det
-                                    c = (-k*m + i*q) / det
-                                    d = (-k*n + i*r) / det
-                                    error = -1e-9
-                                    da = abs(a-a_exact)
-                                    error = max(error,da)
-                                    db = abs(b-b_exact)
-                                    error = max(error,db)
-                                    dc = abs(c-c_exact)
-                                    error = max(error,dc)
-                                    dd = abs(d-d_exact)
-                                    error = max(error,dd)
-
-                                    #error = max([da,db,dc,dd])
-                                    if error < tol:
-                                        #print(i,j,k,l,m,n,q,r, error)
-                                        I.append([i,j,k,l,m,n,q,r])
-                                        #error0 = error
-    #                                    dpar = [da,db,dc,dd]
-    I = np.array(I, dtype=np.int32)
-    #print('error reached',error0, 'tol=', tol, 'the number of solutions: ', len(I), 'da,db,dc,dd=: ', dpar)
-    return I
-
-def _compute_approximate_I_SK(a_exact, b_exact, 
-                             c_exact, d_exact, 
-                             atom_1, atom_2, 
-                             nmax, tol):
-    '''compute ijkl, mnqr that satisfy the commensurability condition altered by SK'''
-    i_range = prange(-nmax,nmax+1)
-    j_range = range(-nmax,nmax+1)
-    k_range = range(-nmax,nmax+1)
-    #l_range = range(-nmax,nmax+1)
-    l_range = range(0,nmax+1) # SK: I think we can cut this in half by symmetry
-
-    #m_range = range(-nmax,nmax+1)
-    #n_range = range(-nmax,nmax+1)
-    #q_range = range(-nmax,nmax+1)
-    #r_range = range(-nmax,nmax+1)
-    
-    I = []
-     
-    #print(16*nmax**8)
-
-    error0 = 1e9
-    for i in i_range:
-        for j in j_range:
-            for k in k_range:
-                for l in l_range:
-                    det = i*l - j*k
-                    if abs(det)<1e-6 or abs(i*j*k*l) < 1e-4: # make sure that the area is finite
-                        continue
-
-                    m_exact = i*a_exact + j*c_exact
-                    n_exact = i*b_exact + j*d_exact
-                    q_exact = k*a_exact + l*c_exact
-                    r_exact = k*b_exact + l*d_exact
-
-                    m = round(m_exact)
-                    n = round(n_exact)
-                    q = round(q_exact)
-                    r = round(r_exact)
-                                    
-                    det2 = m*r - n*q
-                    if abs(det2)<1e-6 or abs(m*n*q*r) < 1e-4:
-                        continue
-
-                    a1_o = i*atom_1.cell[0] + j*atom_1.cell[1]
-                    a2_o = k*atom_1.cell[0] + l*atom_1.cell[1]
-                    a1_s = m*atom_2.cell[0] + n*atom_2.cell[1]
-                    a2_s = q*atom_2.cell[0] + r*atom_2.cell[1]
-
-                    loss_strain = math.sqrt(np.linalg.norm( (a1_o - a1_s)/np.linalg.norm(a1_o) )**2 
-                    + np.linalg.norm( (a2_o - a2_s)/np.linalg.norm(a2_o) )**2)
-
-                    error = -1e-9
-                    ## SK: we used to use the difference between exact values and integer 
-                    ##     but we change this to actually strain 
-                    error = max(error, loss_strain)
-                    #error = max(error,abs(m-m_exact))
-                    #error = max(error,abs(n-n_exact))
-                    #error = max(error,abs(q-q_exact))
-                    #error = max(error,abs(r-r_exact))
-
-                    #error = max([da,db,dc,dd])
-                    if error < tol : #and det2 == det
-                        #print(i,j,k,l,m,n,q,r, error)
-                        I.append([i,j,k,l,m,n,q,r])
-                                        #error0 = error
-    #                                    dpar = [da,db,dc,dd]
-
+            cond = (abs(l*m - j*q - a_exact*detA) < bound and
+                 abs(l*n - j*r - b_exact*detA) < bound and
+                 abs(-k*m + i*q - c_exact*detA) < bound and
+                 abs(-k*n + i*r - d_exact*detA) < bound)
+            if cond:
+                I.append((i,j,k,l,m,n,q,r))
     I = np.array(I, dtype=np.int32)
     if len(I) == 0:
         return None
-    #print('error reached',error0, 'tol=', tol, 'the number of solutions: ', len(I), 'da,db,dc,dd=: ', dpar)
     return I
 
-class twisted_general:
+class twisted_generic:
     '''
        This code generate configurations for twisted bilayer materials.
        We follow closely the approach presented in https://arxiv.org/pdf/2104.09591
        use case: twisted bilayer graphene, bilayer TMD, TMD on hBN substrate ...
     '''
-    def __init__(self,atom1,atom2, angle,ILS,nat_prim=3,n_hbn=1, hbn_ILS=3.5, hbn_top=0):
+    def __init__(self,atom1,
+            atom2, angle,
+            ILS,nat_prim=3,
+            n_hbn=1, 
+            hbn_ILS=3.5, hbn_top=0):
+
         self.atom_1 = atom1
         self.atom_2 = atom2
+        
         self.angle = angle
         self.ILS = ILS
         self.nat_prim = nat_prim
         self.n_hbn = n_hbn
         self.hbn_ILS = hbn_ILS
         self.hbn_top = hbn_top
+    #@jit(['int32[:,:](float32,float32,float32,float32,int32,float32)'],
+    #@jit(
+    #     nopython=True,parallel=True,
+    #    )
+    @njit
+    def _compute_approximate_I_float(self,a_exact, b_exact, 
+                                 c_exact, d_exact, 
+                                 nmax, tol):
+        '''compute ijkl, mnqr that satisfy the commensurability condition
+           Instead of find integers that satisfy the commensubility condition,
+           we seek the nearest float and covert to integers afterwards
+          
+        '''
+        i_range = prange(-nmax,nmax+1)
+        j_range = range(-nmax,nmax+1)
+        k_range = range(-nmax,nmax+1)
+        #l_range = range(0,nmax+1) # SK: I think we can cut this in half by symmetry
+        l_range = range(-nmax,nmax+1) # SK: I think we can cut this in half by symmetry
+
+        I = []
+         
+        #print(16*nmax**8)
+
+        error0 = 1e9
+        for i in i_range:
+            for j in j_range:
+                for k in k_range:
+                    for l in l_range:
+                        det = i*l - j*k
+                        if abs(det)<1e-6 or abs(i*j*k*l) < 1e-4: # make sure the area is finite
+                            continue
+
+                        m_exact = i * a_exact + j * c_exact
+                        n_exact = i * b_exact + j * d_exact
+                        q_exact = k * a_exact + l * c_exact
+                        r_exact = k * b_exact + l * d_exact
+
+
+                        m = round(m_exact)
+                        n = round(n_exact)
+                        q = round(q_exact)
+                        r = round(r_exact)
+                                        
+                        det2 = m * r - n * q
+                        if abs(det2)<1e-6 or abs(m*n*q*r) < 1e-4:
+                            continue
+                        #overlayer
+                        a1_o = i * self.atom_1.cell[0] + j * self.atom_1.cell[1]
+                        a2_o = k * self.atom_1.cell[0] + l * self.atom_1.cell[1]
+                        #substrate
+                        a1_s = m * self.atom_2.cell[0] + n * self.atom_2.cell[1]
+                        a2_s = q * self.atom_2.cell[0] + r * self.atom_2.cell[1]
+
+                        #compute the strain introduce due to twist. The idea is to minimize the strain
+                        # loss_strain = 0 is the best
+                        loss_strain = math.sqrt(np.linalg.norm(
+                            (a1_o - a1_s)/np.linalg.norm(a1_o))**2 
+                        + np.linalg.norm( (a2_o - a2_s)/np.linalg.norm(a2_o) )**2)
+
+                        ## SK: we used to use the difference between exact values and integer 
+                        ##     but we change this to actually strain 
+
+                        if loss_strain < tol : #and det2 == det
+                            I.append([i,j,k,l,m,n,q,r])
+
+        I = np.array(I, dtype=np.int32)
+        if len(I) == 0:
+            return None
+        return I
+
+
     def generate_superperiodic_lattice(self, atom, n,m,nprim,mprim):
+
         a1_sc = atom.cell[0] * n + atom.cell[1] * m
         a2_sc = atom.cell[0] * nprim + atom.cell[1] * mprim
         nat_prim = atom.get_global_number_of_atoms()
         a_cell = np.array([a1_sc, a2_sc, atom.cell[2]])
-        print(a_cell)
         idx = [n,m,nprim,mprim]
-        print(f'expected number of in this layer is={(np.abs(n*mprim-m*nprim))*nat_prim}')
+        print(f'expected number of atoms in this layer is={(np.abs(n*mprim-m*nprim))*nat_prim}')
         #get increaments
         d = []
         for i in idx:
@@ -186,6 +172,7 @@ class twisted_general:
         i2 = range(0,m+d[1],d[1])
         j1 = range(0,nprim+d[2],d[2])
         j2 = range(0,mprim+d[3],d[3])
+
         idx = np.array(list(itertools.product(i1,i2,j1,j2)))
 
         ij1 = idx[:,0] + idx[:,2]
@@ -245,6 +232,7 @@ class twisted_general:
         return [a,b,c,d]
 
     def minimize_moire_area(self, atom_1, atom_2, I): # also minimize the strain!
+
         Ao_prim = np.linalg.norm(np.cross(atom_1.cell[0], atom_1.cell[1]))
         As_prim = np.linalg.norm(np.cross(atom_2.cell[0], atom_2.cell[1]))
 
@@ -253,28 +241,50 @@ class twisted_general:
         As_min = 1e9
         Is = []
         strain_min = 1e9
+        angle_o_min = -1e9
 
-        for _I in I:
+        for idx in range(len(I)):
+            _I = I[idx]
             i,j,k,l,m,n,q,r = _I
+
             loss = np.abs(i*l - k*j)
             loss_s = np.abs(m*r - q*n)
 
-            a1_o = i*atom_1.cell[0] + j*atom_1.cell[1]
-            a2_o = k*atom_1.cell[0] + l*atom_1.cell[1]
-            a1_s = m*atom_2.cell[0] + n*atom_2.cell[1]
-            a2_s = q*atom_2.cell[0] + r*atom_2.cell[1]
+            a1_o = i * atom_1.cell[0] + j * atom_1.cell[1]
+            a2_o = k * atom_1.cell[0] + l * atom_1.cell[1]
+            a1_s = m * atom_2.cell[0] + n * atom_2.cell[1]
+            a2_s = q * atom_2.cell[0] + r * atom_2.cell[1]
 
+            angle_o = np.degrees(
+                    np.arccos(np.dot(a1_o,a2_o) / 
+                    np.linalg.norm(a1_o) / 
+                    np.linalg.norm(a2_o))
+                    )
+
+            angle_s = np.degrees(
+                    np.arccos(np.dot(a1_s,a2_s) / 
+                    np.linalg.norm(a1_s) / 
+                    np.linalg.norm(a2_s))
+                    )
+            
             loss_strain = math.sqrt(np.linalg.norm( (a1_o - a1_s)/np.linalg.norm(a1_o) )**2 
-            + np.linalg.norm( (a2_o - a2_s)/np.linalg.norm(a2_o) )**2)
-            if loss - Ao_min < 1e-6 and loss_s - As_min<1e-6 and loss_strain - strain_min < 1e-8: # and loss_strain SK
+            + np.linalg.norm( (a2_o - a2_s)/np.linalg.norm(a2_o) )**2) / 2.0
+
+            cond = (loss - Ao_min < 1e-6 and 
+                    loss_s - As_min<1e-6 and 
+                    loss_strain - strain_min < 1e-8
+                    )
+            #cond2 = np.logical_and(angle_o>0., angle_o<=120)
+            if cond: # and cond2:
                 Ao_min = loss
                 As_min = loss_s
                 strain_min = loss_strain
+                angle_o_min = angle_o
                 
                 Io = [i,j,k,l]
                 Is = [m,n,q,r]
-                print('Io',Io, Ao_min,'Is',Is, As_min )
-                print(loss_strain)
+                print('Io',Io, Ao_min,'Is',Is, As_min, loss_strain, angle_o)
+                #print(loss_strain)
         
             #loss = np.abs(m*r - q*n)
             #if loss - As_min < 1e-6:
@@ -293,10 +303,15 @@ class twisted_general:
                              nmax, tol): 
         #return approximate_I_omp_module.compute_approximate_I(a_exact, 
         #        b_exact, c_exact, d_exact, nmax, tol)
-        return _compute_approximate_I_SK(a_exact, b_exact, 
+
+        #return _compute_approximate_I(a_exact, b_exact, 
+        return _compute_approximate_I_opt(a_exact, b_exact, 
                              c_exact, d_exact, 
-                             atom_1, atom_2, 
                              nmax, tol)
+
+        #return self._compute_approximate_I_float(a_exact, b_exact, 
+        #                     c_exact, d_exact, 
+        #                     nmax, tol)
     def repeat_cell(self,atoms, n,m):
 
         all_pos = []
@@ -368,33 +383,30 @@ class twisted_general:
         a2_approx  = np.linalg.norm(a2_approx_v)
         a1,a2,_ = np.linalg.norm(atom_1.cell, axis=-1)
 
-        print(a,b,c,d, Io,Is,Ao,As,No,Ns)
+        #print(a,b,c,d, Io,Is,Ao,As,No,Ns)
         print('number of solutions found=:', len(I))
-        print('strain along a1',np.abs(a1_exact-a1_approx)/a1_exact*100, 'change due to transformation:', a1-a1_exact)
-        print('strain along a2',np.abs(a2_exact-a2_approx)/a2_exact*100, 'change due to transformation', a2-a2_exact)
+        print('strain on a1',np.abs(a1_exact-a1_approx)/a1_exact*100)
+        print('strain on a2',np.abs(a2_exact-a2_approx)/a2_exact*100)
+
         aom1_exact = np.linalg.norm(i*atom_1.cell[0] + j*atom_1.cell[1])
         aom1_approx = np.linalg.norm(i*a1_approx_v + j*a2_approx_v)
-
         aom2_exact = np.linalg.norm(k*atom_1.cell[0] + l*atom_1.cell[1])
         aom2_approx = np.linalg.norm(k*a1_approx_v + l*a2_approx_v)
-        
-        print('strain on moire cell along a1',np.abs(aom1_exact-aom1_approx)/aom1_exact*100, aom1_exact, aom1_approx)
-        print('strain on moire cell along a2',np.abs(aom2_exact-aom2_approx)/aom2_exact*100,aom2_exact, aom2_approx)
+
+        print('strain on moire cell on a1',np.abs(aom1_exact-aom1_approx)/aom1_exact*100)
+        print('strain on moire cell on a2',np.abs(aom2_exact-aom2_approx)/aom2_exact*100)
+
 
         ##SK: we remove this restrict the number of units of two layers needed to be the same
         #if abs(det)!=abs(m*r-n*q):
         #   return None
+        
         top_layer = self.generate_superperiodic_lattice(atom_1, *Io)
         bottom_layer = self.generate_superperiodic_lattice(atom_2, *Is)
 
         top_layer.positions[:,2] += self.ILS/2
         width = top_layer.positions[:,2].max()-top_layer.positions[:,2].min()
         bottom_layer.positions[:,2] -= (self.ILS/2 + width)
-        
-        #print(bottom_layer.get_global_number_of_atoms())
-        #write('CrSBr/top.vasp', top_layer, sort=True)
-        #write('CrSBr/botom.vasp', bottom_layer, sort=True)
-        
         
         scaled_positions = top_layer.get_scaled_positions()
         scaled_positions = np.append(scaled_positions, bottom_layer.get_scaled_positions())
@@ -405,4 +417,3 @@ class twisted_general:
         atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell,pbc=True)
         
         return atoms    
-

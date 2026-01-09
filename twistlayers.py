@@ -7,8 +7,10 @@ from ase.build import graphene
 
 from twisted_tmd import twisted_tmd
 from bilayer_systems import bilayer_systems
-from twisted_general_SK import twisted_general
+from twisted_generic import twisted_generic
 import warnings
+import time
+
 def default_configs():
     configs = {}
     configs['chem_form_1'] = None
@@ -75,7 +77,8 @@ def main(chem_form_1, chem_form_2,
     elif _format=='file':
         atom1 = read(chem_form_1)
         atom2 = read(chem_form_2)
-
+    
+    starting_time = time.time()
     if bilayer:
         atoms = bilayer_systems(chem_form_1, alat=alat_1, 
                    chem_form2=chem_form_2, alat2=alat_2,
@@ -95,7 +98,7 @@ def main(chem_form_1, chem_form_2,
         else:
             if n_hbn > 0:
                 warnings.warn('hbn substrate is currently not implemented: Only twisted bilayer will be produced')
-            twist_atoms = twisted_general(atom1, atom2, angle, ILS, n_hbn=0)
+            twist_atoms = twisted_generic(atom1, atom2, angle, ILS, n_hbn=0)
             atoms = twist_atoms.generate_general_moire_lattice_homo(eps=strain_threshold,nmax=nmax)
 
         
@@ -103,6 +106,7 @@ def main(chem_form_1, chem_form_2,
     print('total number of atoms',Nat)
     
     write(outfile, atoms, sort=True, format='vasp', direct=True)
+    print(f'total duration: {time.time() - starting_time}')
     
 if __name__ == '__main__':
 
@@ -140,15 +144,14 @@ if __name__ == '__main__':
     n_hbn = 0
     if hbn:
         n_hbn = configs['n_hbn']
-
     nmax = configs['nmax']
     _format = configs['format']
 
-    main(chem_form_1, chem_form_2, 
-        alat_1, alat_2, 
-        width_1, width_2, 
-        vacuum, angle, 
-        ILS, strain_threshold, 
+    main(chem_form_1, chem_form_2,
+        alat_1, alat_2,
+        width_1, width_2,
+        vacuum, angle,
+        ILS, strain_threshold,
         hbn, nat_prim,
         outfile,
         bilayer,
