@@ -30,7 +30,7 @@ def enumerate_blocks(nmax):
     return blocks
 
 
-@njit
+@njit(fastmath=True)
 def _compute_approximate_I_opt(a_exact, b_exact,
                              c_exact, d_exact,
                              nmax, tol):
@@ -82,9 +82,10 @@ class twisted_generic:
     #@jit(
     #     nopython=True,parallel=True,
     #    )
-    @njit
+
+    #@njit
     def _compute_approximate_I_float(self,a_exact, b_exact, 
-                                 c_exact, d_exact, 
+                                 c_exact, d_exact, atom_1, atom_2,
                                  nmax, tol):
         '''compute ijkl, mnqr that satisfy the commensurability condition
            Instead of find integers that satisfy the commensubility condition,
@@ -125,11 +126,11 @@ class twisted_generic:
                         if abs(det2)<1e-6 or abs(m*n*q*r) < 1e-4:
                             continue
                         #overlayer
-                        a1_o = i * self.atom_1.cell[0] + j * self.atom_1.cell[1]
-                        a2_o = k * self.atom_1.cell[0] + l * self.atom_1.cell[1]
+                        a1_o = i * atom_1.cell[0] + j * atom_1.cell[1]
+                        a2_o = k * atom_1.cell[0] + l * atom_1.cell[1]
                         #substrate
-                        a1_s = m * self.atom_2.cell[0] + n * self.atom_2.cell[1]
-                        a2_s = q * self.atom_2.cell[0] + r * self.atom_2.cell[1]
+                        a1_s = m * atom_2.cell[0] + n * atom_2.cell[1]
+                        a2_s = q * atom_2.cell[0] + r * atom_2.cell[1]
 
                         #compute the strain introduce due to twist. The idea is to minimize the strain
                         # loss_strain = 0 is the best
@@ -305,13 +306,12 @@ class twisted_generic:
         #        b_exact, c_exact, d_exact, nmax, tol)
 
         #return _compute_approximate_I(a_exact, b_exact, 
-        return _compute_approximate_I_opt(a_exact, b_exact, 
-                             c_exact, d_exact, 
-                             nmax, tol)
-
-        #return self._compute_approximate_I_float(a_exact, b_exact, 
+        #return _compute_approximate_I_opt(a_exact, b_exact, 
         #                     c_exact, d_exact, 
         #                     nmax, tol)
+
+        return self._compute_approximate_I_float(a_exact, b_exact, 
+                             c_exact, d_exact, atom_1, atom_2, nmax, tol)
     def repeat_cell(self,atoms, n,m):
 
         all_pos = []
