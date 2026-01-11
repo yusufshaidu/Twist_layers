@@ -16,7 +16,7 @@ thickness_2: -1
 # vacuum layers
 vacuum: 15
 #twist angle in degrees
-twist_angle: 5
+twist_angle: 90
 #avarege interlayer spacing: M-M distance for hexagonal TMD and the actual interlayer spacing for other type of nilayers
 ILS: 3.3
 #strain substrates for heterostructures and general nonhexagonal lattice
@@ -25,7 +25,7 @@ strain_threshold: 0.01 # in ?? something
 hbn: False
 # number of atoms in the primitive cell
 nat_prim: 6
-nmax: 12
+nmax: 20
 #outfile: MoS2-MoSe2_twist_angle_27.8.vasp
 #output file to write the generated structures
 outfile: twisted_layers.vasp

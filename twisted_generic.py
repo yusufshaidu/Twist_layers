@@ -23,7 +23,7 @@ def enumerate_blocks(nmax):
         for j in range(-nmax, nmax+1):
             for k in range(-nmax, nmax+1):
                 for l in range(-nmax, nmax+1):
-                    det = i*k - j*l
+                    det = i*l - j*k
                     cond = (i != 0 and j != 0 and k != 0 and l != 0)
                     if det != 0 and cond and gcd4(i,j,k,l)==1:
                         blocks.append((i,j,k,l,det))
@@ -82,69 +82,69 @@ class twisted_generic:
     #@jit(
     #     nopython=True,parallel=True,
     #    )
-    @njit
+    #@njit
     def _compute_approximate_I_float(self,a_exact, b_exact, 
                                  c_exact, d_exact, 
                                  nmax, tol):
         '''compute ijkl, mnqr that satisfy the commensurability condition
            Instead of find integers that satisfy the commensubility condition,
            we seek the nearest float and covert to integers afterwards
-          
+           
         '''
-        i_range = prange(-nmax,nmax+1)
-        j_range = range(-nmax,nmax+1)
-        k_range = range(-nmax,nmax+1)
-        #l_range = range(0,nmax+1) # SK: I think we can cut this in half by symmetry
-        l_range = range(-nmax,nmax+1) # SK: I think we can cut this in half by symmetry
-
+        #i_range = range(-nmax,nmax+1)
+        #j_range = range(-nmax,nmax+1)
+        #k_range = range(-nmax,nmax+1)
+        ##l_range = range(0,nmax+1) # SK: I think we can cut this in half by symmetry
+        #l_range = range(-nmax,nmax+1) # SK: I think we can cut this in half by symmetry
+        atom_1, atom_2 = self.rotate_cell() #This process only works for rotated cell
+        ijkl_blocks = enumerate_blocks(nmax)
         I = []
-         
-        #print(16*nmax**8)
-
+        strain_min = 1 #SK: for debug
         error0 = 1e9
-        for i in i_range:
-            for j in j_range:
-                for k in k_range:
-                    for l in l_range:
-                        det = i*l - j*k
-                        if abs(det)<1e-6 or abs(i*j*k*l) < 1e-4: # make sure the area is finite
-                            continue
+        for idx in prange(len(ijkl_blocks)):
+            i,j,k,l,detA = ijkl_blocks[idx]
+            detA_abs = abs(detA)
+            bound = tol * detA_abs
 
-                        m_exact = i * a_exact + j * c_exact
-                        n_exact = i * b_exact + j * d_exact
-                        q_exact = k * a_exact + l * c_exact
-                        r_exact = k * b_exact + l * d_exact
+            m_exact = i * a_exact + j * c_exact
+            n_exact = i * b_exact + j * d_exact
+            q_exact = k * a_exact + l * c_exact
+            r_exact = k * b_exact + l * d_exact
 
+            m = round(m_exact)
+            n = round(n_exact)
+            q = round(q_exact)
+            r = round(r_exact)
+            
+            det2 = m * r - n * q
+            if abs(det2)<1e-6 or abs(m*n*q*r) < 1e-4:
+                continue
+            #overlayer
+            
+            a1_o = i * atom_1.cell[0] + j * atom_1.cell[1]
+            a2_o = k * atom_1.cell[0] + l * atom_1.cell[1]
+            #substrate
+            a1_s = m * atom_2.cell[0] + n * atom_2.cell[1]
+            a2_s = q * atom_2.cell[0] + r * atom_2.cell[1]
 
-                        m = round(m_exact)
-                        n = round(n_exact)
-                        q = round(q_exact)
-                        r = round(r_exact)
-                                        
-                        det2 = m * r - n * q
-                        if abs(det2)<1e-6 or abs(m*n*q*r) < 1e-4:
-                            continue
-                        #overlayer
-                        a1_o = i * self.atom_1.cell[0] + j * self.atom_1.cell[1]
-                        a2_o = k * self.atom_1.cell[0] + l * self.atom_1.cell[1]
-                        #substrate
-                        a1_s = m * self.atom_2.cell[0] + n * self.atom_2.cell[1]
-                        a2_s = q * self.atom_2.cell[0] + r * self.atom_2.cell[1]
+            #compute the strain introduce due to twist. The idea is to minimize the strain
+            # loss_strain = 0 is the best
+            loss_strain = math.sqrt(np.linalg.norm(
+                (a1_o - a1_s)/np.linalg.norm(a1_o))**2 
+            + np.linalg.norm( (a2_o - a2_s)/np.linalg.norm(a2_o) )**2)
+            
+            ## SK: we used to use the difference between exact values and integer 
+            ##     but we change this to actually strain 
 
-                        #compute the strain introduce due to twist. The idea is to minimize the strain
-                        # loss_strain = 0 is the best
-                        loss_strain = math.sqrt(np.linalg.norm(
-                            (a1_o - a1_s)/np.linalg.norm(a1_o))**2 
-                        + np.linalg.norm( (a2_o - a2_s)/np.linalg.norm(a2_o) )**2)
-
-                        ## SK: we used to use the difference between exact values and integer 
-                        ##     but we change this to actually strain 
-
-                        if loss_strain < tol : #and det2 == det
-                            I.append([i,j,k,l,m,n,q,r])
+            if loss_strain < tol : #and det2 == det
+                I.append([i,j,k,l,m,n,q,r])
+            elif loss_strain < strain_min:
+                strain_min = loss_strain
 
         I = np.array(I, dtype=np.int32)
         if len(I) == 0:
+            print("error, not finding solution, try enlarge nmax, so far we only get strain min as"
+                  ,strain_min)
             return None
         return I
 
@@ -214,7 +214,7 @@ class twisted_generic:
 
     def compute_transformation_parameters_abcd(self, atom_1, atom_2):
         '''This takes in already twisted lattices'''
-        
+
         as1_dot_as2 = np.dot(atom_2.cell[0], atom_2.cell[1])
         as1_dot_ao1 = np.dot(atom_2.cell[0], atom_1.cell[0])
         as2_dot_ao1 = np.dot(atom_2.cell[1], atom_1.cell[0])
@@ -274,8 +274,8 @@ class twisted_generic:
                     loss_s - As_min<1e-6 and 
                     loss_strain - strain_min < 1e-8
                     )
-            #cond2 = np.logical_and(angle_o>0., angle_o<=120)
-            if cond: # and cond2:
+            cond2 = np.logical_and(angle_o>10, angle_o<=170)
+            if cond and cond2:
                 Ao_min = loss
                 As_min = loss_s
                 strain_min = loss_strain
@@ -304,14 +304,13 @@ class twisted_generic:
         #return approximate_I_omp_module.compute_approximate_I(a_exact, 
         #        b_exact, c_exact, d_exact, nmax, tol)
 
-        #return _compute_approximate_I(a_exact, b_exact, 
-        return _compute_approximate_I_opt(a_exact, b_exact, 
-                             c_exact, d_exact, 
-                             nmax, tol)
-
-        #return self._compute_approximate_I_float(a_exact, b_exact, 
+        #return _compute_approximate_I_opt(a_exact, b_exact, 
         #                     c_exact, d_exact, 
         #                     nmax, tol)
+
+        return self._compute_approximate_I_float(a_exact, b_exact, 
+                             c_exact, d_exact, 
+                             nmax, tol)
     def repeat_cell(self,atoms, n,m):
 
         all_pos = []
@@ -341,22 +340,33 @@ class twisted_generic:
         _atoms.wrap(pbc=True)
         return _atoms
     
-    def generate_general_moire_lattice_homo(self, hbn=False, eps=0.01, nmax=5):
-        '''compute twisted TMD'''
+    def rotate_cell(self):
         angle = self.angle
-        print(angle)
       
-      
-        
         #note that these indexes depends on the choice of lattice vectors
         # for the specific ASE lattice, the following definitions are correct
-        atom_1 = self.atom_1.copy()
-        atom_1.rotate(angle/2,'z',rotate_cell=True)
-        
+        _atom_1 = self.atom_1.copy()
+        _atom_1.rotate(angle/2,'z',rotate_cell=True)
        
-        atom_2 = self.atom_2.copy()
-        
-        atom_2.rotate(-angle/2,'z',rotate_cell=True) 
+        _atom_2 = self.atom_2.copy()
+        _atom_2.rotate(-angle/2,'z',rotate_cell=True) 
+        return _atom_1 ,_atom_2
+
+
+    def generate_general_moire_lattice_homo(self, hbn=False, eps=0.01, nmax=5):
+        '''compute twisted TMD'''
+        #angle = self.angle
+        print(self.angle)
+       #
+        ##note that these indexes depends on the choice of lattice vectors
+        ## for the specific ASE lattice, the following definitions are correct
+        #atom_1 = self.atom_1.copy()
+        #atom_1.rotate(angle/2,'z',rotate_cell=True)
+        #
+        #atom_2 = self.atom_2.copy()
+        #atom_2.rotate(-angle/2,'z',rotate_cell=True) 
+        atom_1, atom_2 = self.rotate_cell()
+
         a,b,c,d = self.compute_transformation_parameters_abcd(atom_1, atom_2)
         time0 = time.time()  
         I = self.compute_approximate_I(a,b,c,d,atom_1,atom_2,nmax,eps)
